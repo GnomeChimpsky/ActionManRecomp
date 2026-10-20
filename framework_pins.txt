@@ -1,0 +1,14 @@
+# Framework revisions this release builds against (record_pins.sh format;
+# checked by psxrecomp/tools/ci/verify_pins.sh). All four are unmodified
+# upstream commits; the submodule gitlinks in this repo point at them.
+#
+# Local changes are NOT forks: scripts/apply_patches.sh applies patches/ on
+# top of these commits in the working tree (HEAD stays on the pin):
+#   psxrecomp: patches/psxrecomp/0001-cdrom-report-Seek-while-a-read-seeks-to-its-Setloc-t.patch
+#              patches/psxrecomp/0002-widescreen-auto-UI-admit-see-through-backing-panels-.patch
+#              patches/psxrecomp/0003-widescreen-auto-UI-classify-HUD-by-vertex-provenance.patch
+#   recomp-ui: patches/recomp-ui/0001-PSX-launcher-show-Render-thread-Present-thread-Smoot.patch
+psxrecomp=53a057f5 (53a057f548cd1f93f1b4d8300caaeded72f4160d)
+recomp-ui=0546fbc (0546fbcb0126bb14bf88d2128b4fe8a4229570a3)
+recomp-net=e530593 (e53059306824edf4f0aec4aae5ae65151b18535f)
+retcomm-rbengine=2a03e73 (2a03e73693acee0fb78076ea058642c931bef12e)

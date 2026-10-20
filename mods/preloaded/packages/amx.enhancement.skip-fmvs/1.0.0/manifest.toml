@@ -1,0 +1,23 @@
+format_version = 5
+id = "amx.enhancement.skip-fmvs"
+version = "1.0.0"
+name = "Action Man FMV Skipping"
+author = "ActionManRecomp"
+description = "Fast-forwards full-motion videos while preserving the game's normal completion behaviour."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLES-01761"
+disc_sha256 = "6ec5784d3a359595083284fafe663f642dc68f801793a331dd478414f22ee341"
+
+[[feature]]
+id = "skip-fmvs"
+name = "Skip FMVs"
+description = "Mute and rapidly advance full-motion videos instead of playing them in real time."
+group = "Gameplay"
+default_enabled = false
+
+[[plugin]]
+feature = "skip-fmvs"
+id = "amx.fmv.skip"

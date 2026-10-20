@@ -1,0 +1,55 @@
+format_version = 5
+id = "amx.enhancement.widescreen"
+version = "1.0.0"
+name = "Action Man Widescreen"
+author = "ActionManRecomp"
+description = "Renders Action Man: Mission Xtreme with a wider field of view (16:9, 21:9 or following the window), keeping the HUD at its original proportions."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLES-01761"
+disc_sha256 = "6ec5784d3a359595083284fafe663f642dc68f801793a331dd478414f22ee341"
+
+[[feature]]
+id = "widescreen"
+name = "Widescreen"
+description = "Enable widescreen rendering and choose a fixed or resize-driven aspect."
+group = "Display"
+default_enabled = false
+
+[[option]]
+feature = "widescreen"
+id = "aspect"
+label = "Aspect ratio"
+description = "Adaptive follows the live window size from 4:3 through 21:9."
+group = "Display"
+type = "choice"
+default = "16:9"
+
+[[option.choice]]
+value = "16:9"
+label = "16:9"
+
+[[option.choice]]
+value = "21:9"
+label = "21:9"
+
+[[option.choice]]
+value = "adaptive"
+label = "Adaptive"
+
+[[plugin]]
+feature = "widescreen"
+id = "amx.widescreen.16-9"
+when = { aspect = "16:9" }
+
+[[plugin]]
+feature = "widescreen"
+id = "amx.widescreen.21-9"
+when = { aspect = "21:9" }
+
+[[plugin]]
+feature = "widescreen"
+id = "amx.widescreen.adaptive"
+when = { aspect = "adaptive" }

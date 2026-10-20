@@ -1,0 +1,13 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "ActionMan",
+  "system": "PS1",
+  "type": "recomp",
+  "toolchain": "psxrecomp",
+  "status": "in-progress",
+  "project": "ActionManRecomp",
+  "original": {
+    "region": "Europe",
+    "serial": "SLES-01761"
+  }
+}

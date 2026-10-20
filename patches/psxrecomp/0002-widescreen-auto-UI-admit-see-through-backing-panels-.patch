@@ -1,0 +1,60 @@
+From cbd40d0e677cd376b058b98b44af73a0c42bde00 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 19 Oct 2026 22:40:54 +0200
+Subject: [PATCH] widescreen auto-UI: admit see-through backing panels from any
+ rank
+
+A semi-transparent untextured quad that fully encloses admitted HUD now joins
+as a backing panel from any OT rank behind the HUD rank, not only the next
+populated one. Which rank is next changed from frame to frame as other widget
+pieces blinked or animated in, so such a panel was squashed in some frames and
+stretched in others and flickered against its own text (Action Man: Mission
+Xtreme's apartment option menus). The small-attached rule still applies to the
+next rank only.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ runtime/src/gpu.c | 19 ++++++++++++++++---
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/runtime/src/gpu.c b/runtime/src/gpu.c
+index 17890e93..8de1f1eb 100644
+--- a/runtime/src/gpu.c
++++ b/runtime/src/gpu.c
+@@ -6618,7 +6618,16 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+      *   - is small (at most a quarter of the display each way) and overlaps or
+      *     stacks directly on an admitted piece (ws_ui_attached).
+      * Repeat until nothing changes, so a piece attached to an admitted piece
+-     * also joins. Admitted pieces then group with their widget's run. */
++     * also joins. Admitted pieces then group with their widget's run.
++     *
++     * A semi-transparent untextured backing panel joins from ANY rank behind
++     * the HUD rank, not only the next one. Which rank is "next" changes from
++     * frame to frame as other widget pieces blink or animate in; tying the
++     * panel to it squashed the panel in some frames and left it stretched in
++     * others, so it flickered against its own text (Action Man's apartment
++     * option menus: a 50%-black panel at rank 980 behind rank-1023 text, with
++     * a rank-1013 layer present only in some frames). A see-through flat box
++     * that fully encloses admitted HUD is a HUD backing at any depth. */
+     uint16_t backing_rank = 0xFFFFu;
+     for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
+         uint16_t r = ws_ui_prepass[i].ot_rank;
+@@ -6635,9 +6644,13 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+         changed = 0;
+         for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
+             const WsUiPrepassItem *it = &ws_ui_prepass[i];
+-            if (keep[i] || it->enclosed_only || it->ot_rank != backing_rank) continue;
+-            const int small = it->group.width <= small_w && it->h <= small_h;
++            if (keep[i] || it->enclosed_only || it->ot_rank >= max_rank) continue;
+             const int untextured = ws_ui_untextured_op(it->op);
++            const int next_rank = it->ot_rank == backing_rank;
++            const int see_through_panel = untextured && (it->op & 0x02u);
++            if (!next_rank && !see_through_panel) continue;
++            const int small = next_rank &&
++                it->group.width <= small_w && it->h <= small_h;
+             for (uint32_t j = 0; j < ws_ui_prepass_count; j++) {
+                 if (!keep[j]) continue;
+                 if ((untextured && ws_ui_encloses(it, &ws_ui_prepass[j])) ||
+-- 
+2.43.0
+

@@ -1,0 +1,67 @@
+From b368b8fa8c6bbddb5babb718f248876d15e4db59 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 19 Oct 2026 19:38:31 +0200
+Subject: [PATCH] cdrom: report Seek while a read seeks to its Setloc target
+
+ReadN/ReadS that consume a Setloc now report Seek (0x42) until the first
+sector arrives, then Read (0x22), instead of Read immediately. Pause also
+clears Seek. Action Man: Mission Xtreme times XA voice clips from the first
+GetStat that does not show Read; reporting Read at once left its end-of-clip
+deadline stale and the clip was paused in the frame it started.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ runtime/src/cdrom.c | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/runtime/src/cdrom.c b/runtime/src/cdrom.c
+index d667ba3f..20bdcfad 100644
+--- a/runtime/src/cdrom.c
++++ b/runtime/src/cdrom.c
+@@ -1640,6 +1640,7 @@ static void start_read_stream(uint8_t cmd) {
+      * read_* at the next sector; a later ReadN/ReadS without Setloc resumes
+      * there. Reusing seek_* unconditionally restarts XA dialogue at its first
+      * sector while the game's subtitle clock resumes where it paused. */
++    int seeking = setloc_pending;
+     if (setloc_pending) {
+         read_min = seek_min;
+         read_sec = seek_sec;
+@@ -1653,7 +1654,15 @@ static void start_read_stream(uint8_t cmd) {
+     s_cd_timing_next_due = psx_cycle_count + (uint64_t)read_delay;
+     s_cd_timing_stream_starts++;
+     reading = 1;
+-    stat_reg |= CDSTAT_READ;
++    /* A read that consumes a Setloc seeks first: GetStat reports Seek (0x42)
++     * until the first sector arrives, then Read (0x22) -- process_read_stream
++     * makes the switch. Action Man: Mission Xtreme times its XA voice clips
++     * from the first poll that does not see Read; reporting Read at once left
++     * its end-of-clip deadline stale and the clip was paused immediately. */
++    if (seeking)
++        stat_reg = (uint8_t)((stat_reg & ~CDSTAT_READ) | CDSTAT_SEEK);
++    else
++        stat_reg |= CDSTAT_READ;
+     /* ENQUEUE: sector-read stream scheduled (due in read_delay cycles). A
+      * content load that happens in OFF but not ON shows up as a missing
+      * SRC_CD_READ enqueue here. */
+@@ -2220,7 +2229,7 @@ static void exec_command(uint8_t cmd) {
+         stop_cdda_playback();
+         xa_reset_decode();
+         spu_cd_audio_reset();
+-        stat_reg &= ~(CDSTAT_READ | CDSTAT_PLAY);
++        stat_reg &= ~(CDSTAT_READ | CDSTAT_PLAY | CDSTAT_SEEK);
+         response_push(stat_reg);
+         set_irq(CDIRQ_ACK);
+         pending_arm(0x09, complete_delay, 1);
+@@ -2729,6 +2738,9 @@ static void process_read_stream(uint32_t cycles) {
+     }
+ 
+     if (read_delay <= 0) {
++        /* Seek done (see start_read_stream): the drive is reading now. */
++        if (stat_reg & CDSTAT_SEEK)
++            stat_reg = (uint8_t)((stat_reg & ~CDSTAT_SEEK) | CDSTAT_READ);
+         uint64_t timing_seq = cd_timing_begin_sector(
+             msf_to_lba(read_min, read_sec, read_sect));
+         if (irq_flag == 0) {
+-- 
+2.43.0
+

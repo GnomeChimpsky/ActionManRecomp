@@ -1,0 +1,91 @@
+format_version = 5
+id = "amx.enhancement.frame-rate"
+version = "1.0.0"
+name = "Action Man Frame Rate"
+author = "ActionManRecomp"
+description = "Intermediate frames rendered with the game's own drawing code, with 3D positions placed between the game's frames. Game logic, timers and audio keep their stock cadence. Requires OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLES-01761"
+disc_sha256 = "6ec5784d3a359595083284fafe663f642dc68f801793a331dd478414f22ee341"
+
+[[feature]]
+id = "interpolated-rendering"
+name = "Interpolated Rendering"
+description = "Redraw the scene between the game's 25 fps frames with interpolated geometry and camera, without speeding up gameplay. Use instead of Settings > Smooth motion."
+group = "Frame Rate"
+default_enabled = false
+
+[[option]]
+feature = "interpolated-rendering"
+id = "rate"
+label = "Presentation rate"
+description = "Follow the display for even cadence, or choose a fixed rate. The game simulation is untouched. Requires OpenGL."
+group = "Frame Rate"
+type = "choice"
+default = "display"
+
+[[option.choice]]
+value = "display"
+label = "Display refresh (Recommended)"
+
+[[option.choice]]
+value = "60"
+label = "60 FPS"
+
+[[option.choice]]
+value = "90"
+label = "90 FPS"
+
+[[option.choice]]
+value = "120"
+label = "120 FPS"
+
+[[option.choice]]
+value = "144"
+label = "144 FPS"
+
+[[option.choice]]
+value = "165"
+label = "165 FPS"
+
+[[option.choice]]
+value = "240"
+label = "240 FPS"
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.display"
+when = { rate = "display" }
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.60"
+when = { rate = "60" }
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.90"
+when = { rate = "90" }
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.120"
+when = { rate = "120" }
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.144"
+when = { rate = "144" }
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.165"
+when = { rate = "165" }
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.240"
+when = { rate = "240" }

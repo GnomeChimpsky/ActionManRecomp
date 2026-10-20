@@ -1,0 +1,147 @@
+# Autofilled by tools/new_project_layout/probe_disc.py from your legal dump.
+# Review before shipping. Runtime quirks / overlay seeds still need hand work.
+
+[game]
+name = "Action Man: Mission Xtreme"
+id = "SLES-01761"
+players = 1
+exe = "disc/SLES_017.61"
+disc = "disc/ActionMan.cue"
+load_address = "0x00018000"
+entry_pc = "0x00085550"
+text_size = "0x00090000"
+stack_base = "0x801FFFF0"
+
+# Digests are for data Track 01 (first BINARY FILE / TRACK 01).
+[prepare_disc]
+out_dir = "disc"
+bin_name = "ActionMan.bin"
+cue_name = "ActionMan.cue"
+boot_exe = "SLES_017.61"
+known_sizes = [552705888]
+known_md5 = [
+  "8e7ca51f688b0e4fa9e2e36bb6a4e8d1",
+]
+known_sha1 = [
+  "0b259a00da8ff2f7d3c3da7eb7954e2b30dd0730",
+]
+known_crc32 = [
+  "34eedfb3",
+]
+
+[recompiler]
+seeds = "seeds/ghidra_funcs.txt"
+out_dir = "generated"
+strict = true
+# Hook sites for the amx.enhancement.frame-rate mod (interpolated rendering):
+# the draw-section start in the in-game main loop, the flip/submit function,
+# the sound-effect start (0x7ABDC, polls SPU voices) and libcd's command
+# write / sync / ready primitives (93A24 / 934DC / 9375C), which the game's
+# logic calls during a frame; all are answered without device access inside a
+# pass (outside passes they run untouched). LoadImage (0x7F6A0): uploads a
+# pass's frame makes into the rect it draws are applied after its OT (the HQ
+# mission-select picture is blitted onto the finished frame).
+mod_instruction_sites = ["0x0002BFC4"]
+mod_function_entry_funcs = ["0x000234F4", "0x0007ABDC",
+    "0x00093A24", "0x000934DC", "0x0009375C", "0x0007F6A0"]
+
+[runtime]
+window_title = "Action Man: Mission Xtreme Recompiled"
+debug_port = 4370
+# HLE boot: skip the BIOS logo and jump straight into the game.
+bios_hle = true
+memcard_dir = "saves"
+overlay_cache = true
+
+[video]
+renderer = "opengl"
+aspect_ratio = "4:3"
+# High internal resolution by default (launcher: Settings > Display).
+internal_resolution = "1440p"
+antialiasing = true
+texture_filtering = "nearest"
+fmv_filter = "bicubic"
+# OpenGL render thread on by default so Smooth motion (frame generation,
+# Settings > Display) can be ticked directly.
+render_thread = true
+# Generic Smooth motion is superseded by the Frame Rate mod (Mods page).
+frame_generation = false
+
+[controller]
+# Action Man is DualShock compatible (analog + vibration). Present an analog
+# pad by default; the D-pad is folded onto the left stick, and players can
+# still switch to Hybrid / D-Pad in the launcher.
+default_mode = "analog"
+deadzone = 3277
+
+# Online mount gate: digests + track count + optional TOC fingerprint
+# (see docs/NETPLAY.md).
+[netplay]
+require_cue = true
+required_tracks = 1
+required_disc_fp = "896a51d577a37e91e8e594c1306393780b06098b03f8591ebe4374c7090de15d"
+
+[widescreen]
+# Widescreen is owned by the amx.enhancement.widescreen mod (Mods page); this
+# block only configures the framework's projection-and-stretch path it uses.
+offer = false
+offer_ultrawide = true
+adaptive_view = true
+# Fully 3D title: gameplay frames are detected from GTE projections; true 2D
+# screens (FMV, loading stills) keep their 4:3 pillarbox.
+gte_game_mode = true
+native_wide = false
+# Proportion-correct the HUD and pin each element to its nearest screen edge /
+# centre. HUD vs world by vertex provenance: anything with a vertex derived
+# from a GTE projection is world (the language-screen flag and its shadow, 3D
+# props); every other 2D primitive is HUD at any OT rank, including the boxes'
+# line outlines; the GTE vehicle icons inside HUD boxes move with their box.
+auto_ui_squash = true
+auto_ui_provenance = true
+
+[widescreen.cull]
+# Action Man's polygon funnels reject a primitive when ALL of its vertices lie
+# beyond one screen edge, using signed screen coordinates centred on the draw
+# offset: X against -320 / +320 (0x140, or 0x141 inclusive) and Y against
+# -128 / +128. auto_screen_x widens every right-edge `slti x, 0x140|0x141` in
+# functions that also carry the Y signature (main EXE, captured overlays and
+# the interpreter alike). Identity at 4:3.
+auto_screen_x = true
+screen_w_imms = ["0x140", "0x141"]
+screen_h_imms = ["0x80", "0x81", "0xFF80"]
+# The matching left-edge rejects (`slti x, -320`) in the boot EXE, moved left
+# by the live reveal margin while widened.
+slti_lower_sites = [
+    "0x00018774",
+    "0x0001878C",
+    "0x000187A4",
+    "0x000187BC",
+    "0x00018B90",
+    "0x00018BA8",
+    "0x00018BC0",
+    "0x0001A088",
+    "0x0001A0A0",
+    "0x0001A0B8",
+    "0x0001A0DC",
+    "0x0001A688",
+    "0x0001A6A0",
+    "0x0001A6B8",
+    "0x0001AD38",
+    "0x0001AD50",
+    "0x0001AD68",
+    "0x0001AD80",
+    "0x0001B20C",
+    "0x0001B224",
+    "0x0001B23C",
+    "0x000408D8",
+    "0x0007C584",
+    "0x0007C59C",
+    "0x0007C5B4",
+    "0x0007C5CC",
+    "0x0007CA44",
+    "0x0007CA5C",
+    "0x0007CA74",
+    # Level overlay (ACTION.DAT member loaded at 0x000BF710): guarded by the
+    # instruction word, so other overlays at these addresses stay vanilla.
+    "0x000C77D8", "0x000C78BC",
+]

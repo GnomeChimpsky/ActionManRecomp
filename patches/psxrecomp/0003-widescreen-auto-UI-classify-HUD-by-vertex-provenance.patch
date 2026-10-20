@@ -1,0 +1,1069 @@
+From e261a5cf82b6bab77105ea9488e5617e92a0b52f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 20 Oct 2026 01:34:02 +0200
+Subject: [PATCH] widescreen auto-UI: classify HUD by vertex provenance
+ (auto_ui_provenance)
+
+New opt-in [widescreen] auto_ui_provenance for the projection-and-stretch
+path. Instead of ordering-table rank, the auto-UI prepass asks the PGXP
+dataflow shadow (armed for this) whether each vertex word was produced by a
+GTE projection:
+
+- A primitive with a projected vertex is world geometry and never squashed
+  as HUD, however axis-aligned or close to the HUD it is.
+- Every other screen-space primitive is a HUD candidate at any rank,
+  including single GP0 lines (box outlines) and large panels, and is
+  grouped and anchored in screen space (packet + draw offset - area).
+- 2D drawn behind the scene (below the 10th percentile of the world's ranks)
+  is a backdrop; a 2D line below the 90th percentile is a scene effect.
+- A run that overlaps a picture the game uploaded into the frame buffer keeps
+  the picture's stretched layout.
+- A projected model inside a small admitted HUD box moves with the box.
+
+Fixes Action Man: Mission Xtreme's language-screen flag cells being squashed
+as HUD (black flickering holes) and HUD box outlines, 3D icons and backing
+panels coming apart from their boxes. Rank-based classification is unchanged
+when the option is off. New test: ws_auto_ui_provenance_exec_test.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ recompiler/src/config_loader.cpp              |   4 +
+ recompiler/src/config_loader.h                |  10 +
+ runtime/CMakeLists.txt                        |  19 +
+ runtime/include/gpu.h                         |   3 +
+ runtime/include/pgxp.h                        |   6 +
+ runtime/src/gpu.c                             | 445 +++++++++++++++++-
+ runtime/src/main.cpp                          |   1 +
+ runtime/src/pgxp.cpp                          |   7 +
+ runtime/tests/gpu_exec_stubs.inc              |  14 +-
+ .../tests/test_ws_auto_ui_provenance_exec.c   | 179 +++++++
+ 10 files changed, 667 insertions(+), 21 deletions(-)
+ create mode 100644 runtime/tests/test_ws_auto_ui_provenance_exec.c
+
+diff --git a/recompiler/src/config_loader.cpp b/recompiler/src/config_loader.cpp
+index 6ca7b5c8..6dc88520 100644
+--- a/recompiler/src/config_loader.cpp
++++ b/recompiler/src/config_loader.cpp
+@@ -1970,6 +1970,7 @@ GameConfig load_game_config(const fs::path& config_path_in) {
+     bool ws_auto_ui_squash = false;
+     bool ws_auto_ui_in_place = false;
+     bool ws_auto_ui_proportional = false;
++    bool ws_auto_ui_provenance = false;
+     bool ws_full_2d = false;
+     bool ws_gte_game_mode = false;
+     bool ws_precise_nclip = false;
+@@ -2133,6 +2134,8 @@ GameConfig load_game_config(const fs::path& config_path_in) {
+                     "{}: [widescreen] auto_ui_anchor must be \"edges\" or "
+                     "\"in_place\", got \"{}\"", config_path.string(), anchor));
+         }
++        if (ws.contains("auto_ui_provenance"))
++            ws_auto_ui_provenance = toml::find<bool>(ws, "auto_ui_provenance");
+         if (ws.contains("auto_ui_size")) {
+             const auto size = toml::find<std::string>(ws, "auto_ui_size");
+             if (size == "proportional")
+@@ -2787,6 +2790,7 @@ GameConfig load_game_config(const fs::path& config_path_in) {
+         /*ws_auto_ui_squash*/      ws_auto_ui_squash,
+         /*ws_auto_ui_in_place*/    ws_auto_ui_in_place,
+         /*ws_auto_ui_proportional*/ ws_auto_ui_proportional,
++        /*ws_auto_ui_provenance*/  ws_auto_ui_provenance,
+         /*data_shard_funcs*/      data_shard_funcs,
+         /*mod_function_entry_funcs*/ mod_function_entry_funcs,
+         /*mod_instruction_sites*/ mod_instruction_sites,
+diff --git a/recompiler/src/config_loader.h b/recompiler/src/config_loader.h
+index 20ff8b08..5b64cf1f 100644
+--- a/recompiler/src/config_loader.h
++++ b/recompiler/src/config_loader.h
+@@ -1132,6 +1132,16 @@ struct GameConfig {
+     // does not show a 4:3-height HUD across a much wider view. "original"
+     // (default) keeps the HUD at the display height's scale.
+     bool                  ws_auto_ui_proportional = false;
++    // auto_ui_provenance: classify HUD against world by where each vertex
++    // came from instead of by ordering-table rank. A primitive with a vertex
++    // derived from a GTE projection (PGXP dataflow incl. CPU arithmetic, armed
++    // for this) is world geometry and never squashed as HUD; every other
++    // screen-space primitive is a HUD candidate at any rank, including single
++    // lines (box outlines; those along a too-big panel widen with it).
++    // GTE-drawn icons inside a small admitted HUD box move with the box.
++    // Packet coordinates are taken relative to the drawing area (draw offset -
++    // area origin), so a centred draw offset anchors widgets to the right edge.
++    bool                  ws_auto_ui_provenance = false;
+ 
+     // [data_shards] funcs: functions that get the memoized pure-function
+     // replay entry/return hooks (psx_datashard_enter/psx_datashard_ret).
+diff --git a/runtime/CMakeLists.txt b/runtime/CMakeLists.txt
+index 76f588f6..74d7fb2f 100644
+--- a/runtime/CMakeLists.txt
++++ b/runtime/CMakeLists.txt
+@@ -990,6 +990,25 @@ if(BUILD_TESTING)
+     add_test(NAME ws_auto_ui_untextured_exec_test
+              COMMAND ws_auto_ui_untextured_exec_test)
+ 
++    # auto_ui_provenance: HUD vs world by GTE provenance, line outlines,
++    # backdrop rejection and projected icons following their HUD box.
++    add_executable(ws_auto_ui_provenance_exec_test
++        tests/test_ws_auto_ui_provenance_exec.c
++        src/ws_ui_group.c
++        src/psx_video_timing.c
++        src/gpu_timeline.c)
++    target_include_directories(ws_auto_ui_provenance_exec_test PRIVATE
++        include
++        src)
++    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
++        target_compile_options(ws_auto_ui_provenance_exec_test PRIVATE
++            -ffunction-sections -fdata-sections)
++        target_link_options(ws_auto_ui_provenance_exec_test PRIVATE
++            -Wl,--gc-sections)
++    endif()
++    add_test(NAME ws_auto_ui_provenance_exec_test
++             COMMAND ws_auto_ui_provenance_exec_test)
++
+     add_executable(ws_shared_split_ui_exec_test
+         tests/test_ws_shared_split_ui_exec.c
+         src/ws_ui_group.c
+diff --git a/runtime/include/gpu.h b/runtime/include/gpu.h
+index 4ce9c929..034b8d8d 100644
+--- a/runtime/include/gpu.h
++++ b/runtime/include/gpu.h
+@@ -224,6 +224,9 @@ void gpu_ws_bg2d_set_host_arena(uint32_t base, uint32_t size);
+ struct WsViewAnchor;
+ int gpu_ws_bg2d_get_view(unsigned layer, struct WsViewAnchor *view);
+ void gpu_ws_set_auto_ui_squash(int on);
++/* [widescreen] auto_ui_provenance: classify auto-UI HUD by vertex provenance
++ * (GTE-projected = world) instead of ordering-table rank. */
++void gpu_ws_set_auto_ui_provenance(int on);
+ /* [widescreen] auto_ui_anchor = "in_place": each UI run squashes about its own
+  * centre rather than an edge/centre third (default "edges"). */
+ void gpu_ws_set_auto_ui_in_place(int on);
+diff --git a/runtime/include/pgxp.h b/runtime/include/pgxp.h
+index 8b5d4455..15a13aeb 100644
+--- a/runtime/include/pgxp.h
++++ b/runtime/include/pgxp.h
+@@ -218,6 +218,12 @@ int pgxp_get_precise_vertex(uint32_t addr, uint32_t packet_word,
+ int pgxp_probe_precise_vertex(uint32_t addr, uint32_t packet_word,
+                               int32_t int_x, int32_t int_y);
+ 
++/* Whether a GP0 vertex word was produced by a GTE projection: its RAM word
++ * carries a live, value-validated dataflow shadow with a projected X/Y
++ * (PGXP_SRC_DATAFLOW only; the position-cache fallback does not count). For
++ * classification (widescreen HUD vs world), not drawing; no statistics. */
++int pgxp_word_projected(uint32_t addr, uint32_t packet_word);
++
+ /* --- observability -------------------------------------------------------- */
+ 
+ typedef struct PGXPStats {
+diff --git a/runtime/src/gpu.c b/runtime/src/gpu.c
+index 8de1f1eb..bbaf234e 100644
+--- a/runtime/src/gpu.c
++++ b/runtime/src/gpu.c
+@@ -149,6 +149,16 @@ typedef struct {
+      * the lower half, so a shrunken widget keeps hugging its screen edge. */
+     int32_t  anchor_y;
+     WsPrepassPacketGuard packet_guard;
++    /* auto_ui_provenance: packet-to-screen offset of the drawing area this
++     * item was drawn in (draw offset - area origin). Prepass geometry is in
++     * screen space; group.anchor/anchor_y are stored back in packet space. */
++    int32_t  ox, oy;
++    /* auto_ui_provenance: a GTE-projected HUD icon inside an admitted HUD
++     * box. Not grouped; at draw time it moves by follow_dx (packet X) so it
++     * stays inside its box when the box squashes about an edge. */
++    uint8_t  follow;
++    int32_t  follow_dx;
++    uint8_t  line;
+ } WsUiPrepassItem;
+ static WsUiPrepassItem ws_ui_prepass[WS_UI_PREPASS_MAX];
+ static uint32_t ws_ui_prepass_count;
+@@ -202,6 +212,10 @@ static struct {
+     uint32_t stale;       /* live packet no longer matches cached bytes    */
+     uint32_t backing;     /* NOT a reject: lower-rank backing panels kept  */
+     uint32_t enclosed;    /* NOT a reject: needles/hands inside a widget   */
++    uint32_t world;       /* auto_ui_provenance: a GTE-projected vertex     */
++    uint32_t behind;      /* auto_ui_provenance: 2D drawn behind the world  */
++    uint32_t picture;     /* auto_ui_provenance: runs framing an upload     */
++    uint32_t follow;      /* NOT a reject: projected icons inside HUD boxes */
+ } ws_ui_reject;
+ 
+ /* Geometry of the primitives the max_rank filter discarded. A count alone
+@@ -249,6 +263,26 @@ extern uint64_t s_frame_count;               /* defined in debug_server.c */
+ extern int      mdec_recently_active(uint32_t within_frames);  /* mdec.c */
+ 
+ static int ws_configured(void) { return ws_xnum != ws_xden; }
++/* [widescreen] auto_ui_provenance: auto_ui_squash in squash mode classifies
++ * HUD against world by vertex provenance (PGXP dataflow: was this word
++ * produced by a GTE projection?), so it arms the PGXP transport like the
++ * other provenance consumers. */
++static int ws_auto_ui_provenance_cfg = 0;
++static int ws_auto_ui_projection_cfg(void) {
++    return ws_auto_ui_squash && ws_auto_ui_provenance_cfg && ws_configured();
++}
++/* Provenance classification in effect: configured and the transport armed
++ * (pgxp_set_enabled fails closed if its shadow cannot be allocated). */
++static int ws_ui_provenance(void) {
++    return ws_auto_ui_projection_cfg() && pgxp_enabled();
++}
++/* auto_ui_provenance: recent CPU->VRAM uploads (VRAM rects + VBlank stamp).
++ * A picture the game copies straight into the frame buffer (Action Man's
++ * mission-select image) cannot be proportion-corrected, so a HUD frame drawn
++ * around it must not be either (ws_ui_prepass_drop_upload_runs). */
++#define WS_UI_UPLOAD_MAX 8u
++static struct { int32_t x, y, w, h; uint32_t stamp; } ws_ui_uploads[WS_UI_UPLOAD_MAX];
++static uint32_t ws_ui_upload_next;
+ 
+ /* Any wide mode engaged (squash or native-wide). Drives the FMV/menu 4:3
+  * pillarbox + the game-vs-2D detector, which both modes share. */
+@@ -282,8 +316,14 @@ void gpu_ws_set_auto_ui_proportional(int on) {
+     ws_auto_ui_proportional = on ? 1 : 0;
+ }
+ 
++void gpu_pgxp_rederive_enable(void);
++void gpu_ws_set_auto_ui_provenance(int on) {
++    ws_auto_ui_provenance_cfg = on ? 1 : 0;
++    gpu_pgxp_rederive_enable();
++}
+ void gpu_ws_set_auto_ui_squash(int on) {
+     ws_auto_ui_squash = on ? 1 : 0;
++    gpu_pgxp_rederive_enable();
+     ws_ui_prepass_count = 0;
+     ws_ui_prepass_nodes_reset();
+     ws_ui_prepass_rank = 0xFFFFu;
+@@ -2248,7 +2288,9 @@ int psx_ws_ui_groups_json(char *buf, int cap) {
+         "\"rejected\":{\"opcode\":%u,\"not_axis\":%u,\"degenerate\":%u,"
+         "\"too_big\":%u,\"cap\":%u,\"rank\":%u,\"stale\":%u},"
+         "\"stale_why\":[%u,%u,%u,%u,%u],\"stale_addr\":\"0x%08X\","
+-        "\"backing_panels\":%u,\"enclosed_parts\":%u,\"n\":%u,",
++        "\"backing_panels\":%u,\"enclosed_parts\":%u,\"n\":%u,"
++        "\"provenance\":%d,\"world\":%u,\"behind\":%u,\"follow\":%u,"
++        "\"picture\":%u,",
+         ws_active(), ws_auto_ui_squash, ws_auto_ui_dense,
+         ws_ui_prepass_rank != 0xFFFFu ? (int)ws_ui_prepass_rank : -1,
+         ws_disp_x(), ws_disp_w(), WS_UI_GROUP_JOIN_GAP,
+@@ -2257,7 +2299,8 @@ int psx_ws_ui_groups_json(char *buf, int cap) {
+         ws_ui_reject.stale, ws_ui_stale_why[1], ws_ui_stale_why[2],
+         ws_ui_stale_why[3], ws_ui_stale_why[4], ws_ui_stale_why[5],
+         ws_ui_stale_addr, ws_ui_reject.backing, ws_ui_reject.enclosed,
+-        ws_ui_prepass_count);
++        ws_ui_prepass_count, ws_ui_provenance(), ws_ui_reject.world,
++        ws_ui_reject.behind, ws_ui_reject.follow, ws_ui_reject.picture);
+     off += snprintf(buf + off, (size_t)(cap - off), "\"rank_dropped\":[");
+     for (uint32_t i = 0; i < ws_ui_rankdrop_count && off < cap - 120; i++) {
+         off += snprintf(buf + off, (size_t)(cap - off),
+@@ -2277,10 +2320,12 @@ int psx_ws_ui_groups_json(char *buf, int cap) {
+         off += snprintf(buf + off, (size_t)(cap - off),
+             "%s{\"i\":%u,\"op\":\"%02x\",\"key\":\"%08x\",\"root\":%u,"
+             "\"x\":%d,\"w\":%d,\"y\":%d,\"h\":%d,"
+-            "\"band\":%u,\"family\":%u,\"anchor\":%d,\"src\":\"%08x\"}",
++            "\"band\":%u,\"family\":%u,\"anchor\":%d,\"src\":\"%08x\","
++            "\"rank\":%u,\"follow\":%u,\"dx\":%d}",
+             i ? "," : "", i, it->op, it->group.key, it->group.root,
+             it->group.x, it->group.width, it->y, it->h,
+-            band, family, it->group.anchor, it->src_addr);
++            band, family, it->group.anchor, it->src_addr,
++            it->ot_rank, it->follow, it->follow_dx);
+     }
+     off += snprintf(buf + off, (size_t)(cap - off), "]");
+     return off;
+@@ -2414,6 +2459,7 @@ void gpu_ws_configure(int aspect_num, int aspect_den,
+     }
+     ws_anchor_addr = sprite_anchor_addr;
+     ws_hud_sprt    = hud_sprt_squash;
++    gpu_pgxp_rederive_enable();
+     /* Adaptive view can change mode/extent without the guest reissuing E3/E4
+      * immediately. Keep the active mirror target and its scissor in lockstep
+      * with the new live aspect instead of waiting for another draw-env packet. */
+@@ -3137,6 +3183,11 @@ static int ws_auto_ui_transform_part(int32_t *vx, int32_t *vy, int n) {
+     if (ws_nw_explicit_hud_delta(NULL) || psx_ws_prim_is_tagged()) return 0;
+     const WsUiPrepassItem *it = ws_auto_ui_item();
+     if (!it) return 0;
++    if (it->follow) {
++        for (int i = 0; i < n; i++) vx[i] += it->follow_dx;
++        ws_auto_ui_transform_count++;
++        return 1;
++    }
+     const double s = ws_auto_ui_size();
+     for (int i = 0; i < n; i++) {
+         vx[i] = ws_ui_x(vx[i], it->group.anchor, s) + ws_shared_ui_delta();
+@@ -3160,12 +3211,20 @@ static int ws_auto_ui_transform_quad(int32_t vx[4], int32_t vy[4]) {
+     }
+     int32_t width = max_x - min_x, height = max_y - min_y;
+     int32_t X = ws_disp_x(), W = ws_disp_w(), H = ws_disp_h();
+-    if ((min_x <= X && max_x >= X + W && min_y <= 0 && max_y >= H) ||
+-        (width > W / 2 && height > H / 4))
++    /* Under auto_ui_provenance the prepass already sorted these out (in
++     * screen space; these packet-space tests do not know the draw offset). */
++    if (!ws_ui_provenance() &&
++        ((min_x <= X && max_x >= X + W && min_y <= 0 && max_y >= H) ||
++         (width > W / 2 && height > H / 4)))
+         return 0;
+ 
+     const WsUiPrepassItem *it = ws_auto_ui_item();
+     if (!it) return 0;
++    if (it->follow) {
++        for (int i = 0; i < 4; i++) vx[i] += it->follow_dx;
++        ws_auto_ui_transform_count++;
++        return 1;
++    }
+     const double s = ws_auto_ui_size();
+     for (int i = 0; i < 4; i++) {
+         vx[i] = ws_ui_x(vx[i], it->group.anchor, s) + ws_shared_ui_delta();
+@@ -3186,11 +3245,17 @@ static int ws_auto_ui_transform_rect(int32_t *x, int32_t *y, int *w, int *h) {
+     if (ws_nw_explicit_hud_delta(NULL) || psx_ws_prim_is_tagged())
+         return 0;
+     int32_t X = ws_disp_x(), W = ws_disp_w(), H = ws_disp_h();
+-    if ((*x <= X && *x + *w >= X + W && *y <= 0 && *y + *h >= H) ||
+-        (*w > W / 2 && *h > H / 4))
++    if (!ws_ui_provenance() &&
++        ((*x <= X && *x + *w >= X + W && *y <= 0 && *y + *h >= H) ||
++         (*w > W / 2 && *h > H / 4)))
+         return 0;
+     const WsUiPrepassItem *it = ws_auto_ui_item();
+     if (!it) return 0;
++    if (it->follow) {
++        *x += it->follow_dx;
++        ws_auto_ui_transform_count++;
++        return 1;
++    }
+     const double s = ws_auto_ui_size();
+     if (s >= 1.0) {
+         *x = ws_scale_about(*x, it->group.anchor) + ws_shared_ui_delta();
+@@ -4558,7 +4623,8 @@ void gpu_pgxp_rederive_enable(void) {
+     pgxp_set_enabled(s_texture_correction_enabled ||
+                      gte_geometry_correction_enabled() ||
+                      ws_precise_nclip_cfg ||
+-                     s_native_wide_projection_correction);
++                     s_native_wide_projection_correction ||
++                     ws_auto_ui_projection_cfg());
+ }
+ 
+ void psx_mod_set_native_wide_projection_correction(int enabled) {
+@@ -5630,9 +5696,10 @@ static void gp0_exec_mono_line(void) {
+         ws_nw_sync_target();
+         return;
+     }
+-    int32_t vx[2] = { x0, x1 };
++    int32_t vx[2] = { x0, x1 }, vy[2] = { y0, y1 };
++    if (ws_auto_ui_provenance_cfg) ws_auto_ui_transform_part(vx, vy, 2);
+     ws_nw_hud_shift_vertices(vx, 2);
+-    x0 = vx[0]; x1 = vx[1];
++    x0 = vx[0]; x1 = vx[1]; y0 = vy[0]; y1 = vy[1];
+     x0 += draw_offset_x; y0 += draw_offset_y;
+     x1 += draw_offset_x; y1 += draw_offset_y;
+     {
+@@ -5652,9 +5719,10 @@ static void gp0_exec_shaded_line(void) {
+     parse_vertex(gp0_cmd_buf[1], &x0, &y0);
+     parse_vertex(gp0_cmd_buf[3], &x1, &y1);
+     if (psx_gpu_line_oversize(x0, y0, x1, y1)) return;
+-    int32_t vx[2] = { x0, x1 };
++    int32_t vx[2] = { x0, x1 }, vy[2] = { y0, y1 };
++    if (ws_auto_ui_provenance_cfg) ws_auto_ui_transform_part(vx, vy, 2);
+     ws_nw_hud_shift_vertices(vx, 2);
+-    x0 = vx[0]; x1 = vx[1];
++    x0 = vx[0]; x1 = vx[1]; y0 = vy[0]; y1 = vy[1];
+     x0 += draw_offset_x; y0 += draw_offset_y;
+     x1 += draw_offset_x; y1 += draw_offset_y;
+     {
+@@ -6132,6 +6200,14 @@ static void gp0_exec_cpu_to_vram(void) {
+     vram_write_w = (w == 0) ? 0x400 : (uint16_t)w;
+     vram_write_h = (h == 0) ? 0x200 : (uint16_t)h;
+     gr_vram_upload_begin(vram_write_x, vram_write_y, vram_write_w, vram_write_h);
++    if (ws_auto_ui_projection_cfg() && vram_write_w >= 64 && vram_write_h >= 32) {
++        const uint32_t slot = ws_ui_upload_next++ % WS_UI_UPLOAD_MAX;
++        ws_ui_uploads[slot].x = vram_write_x;
++        ws_ui_uploads[slot].y = vram_write_y;
++        ws_ui_uploads[slot].w = vram_write_w;
++        ws_ui_uploads[slot].h = vram_write_h;
++        ws_ui_uploads[slot].stamp = (uint32_t)s_frame_count;
++    }
+ 
+     /* A full history retains old uploads; later transfers must not append
+      * to the last slot and overflow its diagnostic word counter. */
+@@ -6342,9 +6418,63 @@ int gpu_gp0_command_word_count(uint8_t opcode) {
+     return gp0_command_word_count(opcode);
+ }
+ 
++
++/* GP0 word indices of a drawing command's vertices (polygons, single lines,
++ * rectangles); 0 for anything else (poly-lines, transfers, state). */
++static int ws_gp0_vertex_words(uint8_t op, int idx[4]) {
++    if (op >= 0x20u && op <= 0x3Fu) {
++        const int quad = (op & 0x08u) != 0;
++        const int step = 1 + ((op & 0x04u) ? 1 : 0) + ((op & 0x10u) ? 1 : 0);
++        const int n = quad ? 4 : 3;
++        for (int i = 0; i < n; i++) idx[i] = 1 + i * step;
++        return n;
++    }
++    if (op >= 0x40u && op <= 0x5Fu && !(op & 0x08u)) {
++        idx[0] = 1;
++        idx[1] = (op & 0x10u) ? 3 : 2;
++        return 2;
++    }
++    if (op >= 0x60u && op <= 0x7Fu) { idx[0] = 1; return 1; }
++    return 0;
++}
++
++/* Vertices of a command whose words were produced by a GTE projection
++ * (pgxp_word_projected). `addr` is the command's first word in RAM. */
++static int ws_gp0_projected_vertices(const uint32_t *words, uint32_t addr) {
++    int idx[4];
++    const int n = ws_gp0_vertex_words((uint8_t)(words[0] >> 24), idx);
++    int projected = 0;
++    if (addr == 0xFFFFFFFFu) return 0;
++    for (int i = 0; i < n; i++)
++        projected += pgxp_word_projected(addr + (uint32_t)idx[i] * 4u,
++                                         words[idx[i]]) ? 1 : 0;
++    return projected;
++}
++
++/* auto_ui_provenance: GTE-projected primitives of the walked list, kept aside
++ * (screen-space bounds) so a 3D icon inside an admitted HUD box can follow it. */
++#define WS_UI_FOLLOW_MAX 512u
++typedef struct {
++    int32_t x0, x1, y0, y1;          /* screen space, display-relative X     */
++    int32_t ox, oy;
++    uint32_t src_addr;
++    uint16_t ot_rank;
++    uint8_t  op;
++    WsPrepassPacketGuard packet_guard;
++} WsUiFollower;
++static WsUiFollower ws_ui_followers[WS_UI_FOLLOW_MAX];
++static uint32_t ws_ui_follower_count;
++/* auto_ui_provenance: OT ranks of the projected (world) primitives, so 2D
++ * drawn BEHIND the 3D scene -- a backdrop tiled from small quads, like the
++ * language screen's gradient behind the waving flag -- is not taken for HUD. */
++#define WS_UI_WORLD_RANKS 4096u
++static uint32_t ws_ui_world_rank_count[WS_UI_WORLD_RANKS];
++static uint32_t ws_ui_world_total;
++
+ static void ws_ui_prepass_add(const uint32_t *words, uint32_t word_count,
+                               uint32_t source_addr, uint16_t rank,
+-                              int full_draw_area) {
++                              int full_draw_area, int32_t ox, int32_t oy,
++                              int provenance) {
+     if (rank == 0xFFFFu) return;
+     if (ws_ui_prepass_count >= WS_UI_PREPASS_MAX) { ws_ui_reject.cap++; return; }
+     uint32_t op = words[0] >> 24;
+@@ -6436,11 +6566,48 @@ static void ws_ui_prepass_add(const uint32_t *words, uint32_t word_count,
+         if (width <= 0 || height <= 0) { ws_ui_reject.degenerate++; return; }
+         max_x = min_x + width;
+         max_y = min_y + height;
++    } else if (provenance && op >= 0x40u && op <= 0x5Fu && !(op & 0x08u)) {
++        /* A single line: under provenance classification a HUD box's outline
++         * (Action Man draws its panel frames as GP0 0x40 lines around 0x2A
++         * fills). Inclusive pixel extent, so an edge line overlaps its fill. */
++        int32_t x1, y1;
++        parse_vertex(words[1], &min_x, &min_y);
++        parse_vertex(words[(op & 0x10u) ? 3 : 2], &x1, &y1);
++        max_x = min_x; max_y = min_y;
++        if (x1 < min_x) min_x = x1; else max_x = x1;
++        if (y1 < min_y) min_y = y1; else max_y = y1;
++        max_x++;
++        max_y++;
+     } else {
+         ws_ui_reject.opcode++;
+         return;
+     }
+ 
++    if (provenance) {
++        /* Screen space: packet coordinates are relative to the draw offset. */
++        min_x += ox; max_x += ox;
++        min_y += oy; max_y += oy;
++        if (ws_gp0_projected_vertices(words, source_addr) > 0) {
++            /* World geometry (or a GTE-drawn HUD icon): never a HUD
++             * candidate on its own. Kept aside for ws_ui_prepass_follow. */
++            ws_ui_reject.world++;
++            ws_ui_world_rank_count[rank < WS_UI_WORLD_RANKS ? rank
++                                   : WS_UI_WORLD_RANKS - 1u]++;
++            ws_ui_world_total++;
++            if (ws_ui_follower_count < WS_UI_FOLLOW_MAX) {
++                WsUiFollower *f = &ws_ui_followers[ws_ui_follower_count++];
++                f->x0 = min_x - ws_disp_x(); f->x1 = max_x - ws_disp_x();
++                f->y0 = min_y; f->y1 = max_y;
++                f->ox = ox; f->oy = oy;
++                f->src_addr = GPU_RAM_KEY(source_addr);
++                f->ot_rank = rank;
++                f->op = (uint8_t)op;
++                f->packet_guard = ws_prepass_packet_guard(words, word_count);
++            }
++            return;
++        }
++    }
++
+     int32_t width = max_x - min_x, height = max_y - min_y;
+     int32_t X = ws_disp_x(), W = ws_disp_w(), H = ws_disp_h();
+     /* Anything spanning the display width (to within W/64 of each edge) is a
+@@ -6449,8 +6616,15 @@ static void ws_ui_prepass_add(const uint32_t *words, uint32_t word_count,
+      * bars left the revealed margins showing whatever the frame cleared to,
+      * and the pause menu's rules (x 2..510 of 512) stopped short of the band
+      * they frame (Spider-Man). */
++    const int is_line = provenance && op >= 0x40u && op <= 0x5Fu;
++    /* auto_ui_provenance: a large panel that is not a full-width band is a
++     * HUD/menu panel like any other (world geometry never gets here), and is
++     * proportion-corrected with the widget it frames. Leaving it wide while
++     * the boxes and text inside it squashed tore Action Man's briefing and
++     * option frames apart. */
++    const int big = width > W / 2 && height > H / 4;
+     if ((min_x <= X + W / 64 && max_x >= X + W - W / 64) ||
+-        (width > W / 2 && height > H / 4)) {
++        (big && !provenance)) {
+         ws_ui_reject.too_big++;
+         return;
+     }
+@@ -6473,6 +6647,11 @@ static void ws_ui_prepass_add(const uint32_t *words, uint32_t word_count,
+     item->shared_split_ui = 0;
+     item->enclosed_only = (uint8_t)enclosed_only;
+     item->packet_guard = ws_prepass_packet_guard(words, word_count);
++    item->ox = provenance ? ox : 0;
++    item->oy = provenance ? oy : 0;
++    item->follow = 0;
++    item->follow_dx = 0;
++    item->line = (uint8_t)is_line;
+ }
+ 
+ static int ws_ui_untextured_op(uint8_t op) {
+@@ -6499,6 +6678,169 @@ static int ws_ui_attached(const WsUiPrepassItem *a, const WsUiPrepassItem *b) {
+     return gap <= WS_UI_GROUP_STACK_GAP;
+ }
+ 
++/* auto_ui_provenance: a GTE-drawn HUD icon (Action Man's spinning vehicle in
++ * its HUD box) was squashed about the projection centre with the world, while
++ * the 2D box around it squashes about its widget anchor; the icon drifts out
++ * of its box. A projected primitive whose un-squashed bounds lie inside an
++ * admitted HUD primitive follows that primitive: for squash k, anchor A and
++ * projection centre c, the box maps x -> A + (x - A)k and the icon was drawn
++ * at c + (x - c)k, so moving the icon by (A - c)(1 - k) lands it where the
++ * box's own transform would have put it. Centre c is the display centre. */
++static uint32_t ws_ui_follow_root(uint32_t *parent, uint32_t i) {
++    while (parent[i] != i) { parent[i] = parent[parent[i]]; i = parent[i]; }
++    return i;
++}
++
++static void ws_ui_prepass_follow(const WsUiGroupItem *groups) {
++    if (!ws_ui_follower_count || ws_xnum >= ws_xden) return;
++    const double k = (double)ws_xnum / (double)ws_xden;
++    const double cs = (double)ws_disp_w() / 2.0;
++    const uint32_t admitted = ws_ui_prepass_count;
++    const uint32_t n = ws_ui_follower_count;
++    static int32_t ux0[WS_UI_FOLLOW_MAX], ux1[WS_UI_FOLLOW_MAX];
++    static int32_t cx0[WS_UI_FOLLOW_MAX], cx1[WS_UI_FOLLOW_MAX];
++    static int32_t cy0[WS_UI_FOLLOW_MAX], cy1[WS_UI_FOLLOW_MAX];
++    static uint32_t parent[WS_UI_FOLLOW_MAX];
++    static int box_of[WS_UI_FOLLOW_MAX];
++    for (uint32_t f = 0; f < n; f++) {
++        const WsUiFollower *fo = &ws_ui_followers[f];
++        ux0[f] = (int32_t)floor(cs + ((double)fo->x0 - cs) / k);
++        ux1[f] = (int32_t)ceil(cs + ((double)fo->x1 - cs) / k);
++        parent[f] = f;
++        box_of[f] = -1;
++    }
++    /* One model = projected primitives touching each other within a few OT
++     * ranks (un-squashed screen bounds). */
++    for (uint32_t f = 0; f < n; f++) {
++        const WsUiFollower *a = &ws_ui_followers[f];
++        for (uint32_t g = f + 1; g < n; g++) {
++            const WsUiFollower *b = &ws_ui_followers[g];
++            if (ux0[f] > ux1[g] || ux0[g] > ux1[f] ||
++                a->y0 > b->y1 || b->y0 > a->y1) continue;
++            if (abs((int)a->ot_rank - (int)b->ot_rank) > 8) continue;
++            const uint32_t ra = ws_ui_follow_root(parent, f);
++            const uint32_t rb = ws_ui_follow_root(parent, g);
++            if (ra != rb) parent[rb] = ra;
++        }
++    }
++    for (uint32_t f = 0; f < n; f++) {
++        cx0[f] = INT32_MAX; cx1[f] = INT32_MIN; cy0[f] = INT32_MAX; cy1[f] = INT32_MIN;
++    }
++    for (uint32_t f = 0; f < n; f++) {
++        const uint32_t r = ws_ui_follow_root(parent, f);
++        const WsUiFollower *fo = &ws_ui_followers[f];
++        if (ux0[f] < cx0[r]) cx0[r] = ux0[f];
++        if (ux1[f] > cx1[r]) cx1[r] = ux1[f];
++        if (fo->y0 < cy0[r]) cy0[r] = fo->y0;
++        if (fo->y1 > cy1[r]) cy1[r] = fo->y1;
++    }
++    /* A model follows the smallest small admitted HUD box (an icon box, not a
++     * menu panel, which shows world geometry through it) that holds its
++     * centre, provided the whole model stays within half the box's size of
++     * the box: a vehicle icon poking out of its box follows; a world object
++     * that merely reaches behind a HUD element (the language screen's flag
++     * under its caption) does not. */
++    static int comp_box[WS_UI_FOLLOW_MAX];
++    for (uint32_t r = 0; r < n; r++) {
++        comp_box[r] = -1;
++        if (ws_ui_follow_root(parent, r) != r) continue;
++        const int32_t mxc = (cx0[r] + cx1[r]) / 2, myc = (cy0[r] + cy1[r]) / 2;
++        int64_t best_area = 0;
++        for (uint32_t i = 0; i < admitted; i++) {
++            const WsUiPrepassItem *box = &ws_ui_prepass[i];
++            if (box->enclosed_only || box->line) continue;
++            if (box->group.width > ws_disp_w() / 3 || box->h > ws_disp_h() / 2)
++                continue;
++            const int32_t bx0 = box->group.x, bx1 = box->group.x + box->group.width;
++            const int32_t by0 = box->y, by1 = box->y + box->h;
++            if (mxc < bx0 || mxc > bx1 || myc < by0 || myc > by1) continue;
++            const int32_t mx = box->group.width / 2, my = box->h / 2;
++            if (cx0[r] < bx0 - mx || cx1[r] > bx1 + mx ||
++                cy0[r] < by0 - my || cy1[r] > by1 + my) continue;
++            const int64_t area = (int64_t)box->group.width * box->h;
++            if (comp_box[r] < 0 || area < best_area) { comp_box[r] = (int)i; best_area = area; }
++        }
++    }
++    for (uint32_t f = 0; f < n; f++)
++        box_of[f] = comp_box[ws_ui_follow_root(parent, f)];
++    for (uint32_t f = 0; f < ws_ui_follower_count; f++) {
++        if (box_of[f] < 0) continue;
++        if (ws_ui_prepass_count >= WS_UI_PREPASS_MAX) break;
++        const WsUiFollower *fo = &ws_ui_followers[f];
++        const int best = box_of[f];
++        WsUiPrepassItem *it = &ws_ui_prepass[ws_ui_prepass_count];
++        const WsUiPrepassItem *box = &ws_ui_prepass[best];
++        memset(it, 0, sizeof *it);
++        it->group = box->group;                 /* diagnostics only */
++        it->group.x = fo->x0;
++        it->group.width = fo->x1 - fo->x0;
++        it->group.root = (uint32_t)best;
++        it->src_addr = fo->src_addr;
++        it->ot_rank = fo->ot_rank;
++        it->y = fo->y0;
++        it->h = fo->y1 - fo->y0;
++        it->op = fo->op;
++        it->enclosed_only = 1;
++        it->packet_guard = fo->packet_guard;
++        it->ox = fo->ox;
++        it->oy = fo->oy;
++        it->follow = 1;
++        /* Anchor relative to the display, as the grouping returned it. */
++        const double a = (double)(groups[best].anchor);
++        it->follow_dx = (int32_t)lround((a - cs) * (1.0 - k));
++        ws_ui_prepass_count++;
++        ws_ui_reject.follow++;
++    }
++}
++
++/* auto_ui_provenance: an admitted item overlapping a picture uploaded into
++ * the frame buffer within the last few VBlanks (screen space via the drawing
++ * area origin) marks its whole run as unscalable: the run keeps the stretched
++ * 4:3 layout of the picture it frames. Keeps `groups` index-aligned with
++ * ws_ui_prepass (roots remapped). */
++static void ws_ui_prepass_drop_upload_runs(WsUiGroupItem *groups,
++                                           int area_left, int area_top) {
++    const uint32_t n = ws_ui_prepass_count;
++    const uint32_t now = (uint32_t)s_frame_count;
++    static uint8_t pic_root[WS_UI_PREPASS_MAX];
++    static uint32_t remap[WS_UI_PREPASS_MAX];
++    int any = 0;
++    memset(pic_root, 0, n);
++    for (uint32_t u = 0; u < WS_UI_UPLOAD_MAX; u++) {
++        if (!ws_ui_uploads[u].w || now - ws_ui_uploads[u].stamp > 6u) continue;
++        const int32_t px0 = ws_ui_uploads[u].x - area_left - ws_disp_x();
++        const int32_t py0 = ws_ui_uploads[u].y - area_top;
++        const int32_t px1 = px0 + ws_ui_uploads[u].w, py1 = py0 + ws_ui_uploads[u].h;
++        for (uint32_t i = 0; i < n; i++) {
++            const WsUiPrepassItem *it = &ws_ui_prepass[i];
++            const int32_t x0 = it->group.x, x1 = x0 + it->group.width;
++            if (x0 >= px1 || px0 >= x1 || it->y >= py1 || py0 >= it->y + it->h)
++                continue;
++            const uint32_t r = (uint32_t)groups[i].root;
++            if (r < n) { pic_root[r] = 1; any = 1; }
++        }
++    }
++    if (!any) return;
++    uint32_t out = 0;
++    for (uint32_t i = 0; i < n; i++) {
++        const uint32_t r = (uint32_t)groups[i].root;
++        if (r < n && pic_root[r]) {
++            ws_ui_reject.picture++;
++            remap[i] = UINT32_MAX;
++            continue;
++        }
++        remap[i] = out;
++        ws_ui_prepass[out] = ws_ui_prepass[i];
++        groups[out] = groups[i];
++        out++;
++    }
++    for (uint32_t i = 0; i < out; i++) {
++        const uint32_t r = (uint32_t)groups[i].root;
++        groups[i].root = (r < n && remap[r] != UINT32_MAX) ? remap[r] : i;
++    }
++    ws_ui_prepass_count = out;
++}
++
+ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+     ws_ui_prepass_count = 0;
+     ws_ui_prepass_nodes_reset();
+@@ -6507,8 +6849,16 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+     ws_ui_reject.opcode = ws_ui_reject.not_axis = ws_ui_reject.degenerate =
+         ws_ui_reject.too_big = ws_ui_reject.cap = ws_ui_reject.rank =
+         ws_ui_reject.stale = ws_ui_reject.backing = ws_ui_reject.enclosed = 0;
++    ws_ui_reject.world = ws_ui_reject.behind = ws_ui_reject.follow = 0;
++    ws_ui_reject.picture = 0;
+     ws_ui_rankdrop_count = 0;
++    ws_ui_follower_count = 0;
++    if (ws_ui_world_total) {
++        memset(ws_ui_world_rank_count, 0, sizeof ws_ui_world_rank_count);
++        ws_ui_world_total = 0;
++    }
+     if (!ws_auto_ui_squash || !ws_active()) return;
++    const int provenance = ws_ui_provenance();
+ 
+     uint32_t addr = psx_mod_gpu_dma_resolve_address(start_addr);
+     uint32_t safety = 0;
+@@ -6516,6 +6866,9 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+     uint16_t max_rank = 0xFFFFu;
+     const uint32_t max_nodes = 0x40000u;
+     int area_left = (int)draw_area_left, area_right = (int)draw_area_right;
++    int area_top = (int)draw_area_top;
++    const int walk_area_left = area_left, walk_area_top = area_top;
++    int32_t off_x = draw_offset_x, off_y = draw_offset_y;
+     GpuDisplayInfo di;
+     gpu_get_display_info(&di);
+ 
+@@ -6579,9 +6932,17 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+                 ws_ui_prepass_add(words, (uint32_t)count,
+                     psx_mod_gpu_dma_resolve_address(
+                         word_addr + offset * 4u), rank,
+-                    area_right - area_left + 1 >= (int)di.width);
+-                if (op == 0xE3u) area_left = (int)(words[0] & 0x3FFu);
++                    area_right - area_left + 1 >= (int)di.width,
++                    off_x - area_left, off_y - area_top, provenance);
++                if (op == 0xE3u) {
++                    area_left = (int)(words[0] & 0x3FFu);
++                    area_top = (int)((words[0] >> 10) & 0x3FFu);
++                }
+                 if (op == 0xE4u) area_right = (int)(words[0] & 0x3FFu);
++                if (op == 0xE5u) {
++                    off_x = sign_extend(words[0] & 0x7FFu, 11);
++                    off_y = sign_extend((words[0] >> 11) & 0x7FFu, 11);
++                }
+                 offset += (uint32_t)count;
+             }
+         }
+@@ -6636,11 +6997,41 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+             backing_rank = r;
+     }
+     static uint8_t keep[WS_UI_PREPASS_MAX];
++    /* auto_ui_provenance: world geometry never got this far (GTE-projected
++     * vertices), so every remaining screen-space primitive is a HUD candidate
++     * whatever its rank; the rank heuristics below are not needed. */
+     for (uint32_t i = 0; i < ws_ui_prepass_count; i++)
+-        keep[i] = ws_ui_prepass[i].ot_rank == max_rank &&
++        keep[i] = (provenance || ws_ui_prepass[i].ot_rank == max_rank) &&
+                   !ws_ui_prepass[i].enclosed_only;
++    uint32_t p10 = 0, p90 = 0;
++    if (provenance && ws_ui_world_total) {
++        /* 2D that belongs to the 3D scene. A HUD is drawn in front of the
++         * world; percentiles of the world's OT ranks, so a stray far-back or
++         * front-most world primitive does not move the bounds.
++         *  - Below the 10th percentile: a backdrop behind the scene (the
++         *    language screen's gradient tiles behind the waving flag).
++         *  - A line below the 90th percentile: an effect drawn into the scene
++         *    from CPU-offset projected points (the docks boss's laser beams),
++         *    which the GTE-dataflow test cannot see. HUD outlines are drawn
++         *    in front of it. */
++        uint32_t seen = 0;
++        const uint32_t want10 = ws_ui_world_total / 10u + 1u;
++        const uint32_t want90 = ws_ui_world_total - ws_ui_world_total / 10u;
++        for (uint32_t r = 0; r < WS_UI_WORLD_RANKS; r++) {
++            seen += ws_ui_world_rank_count[r];
++            if (seen < want10) p10 = r + 1u;
++            if (seen < want90) p90 = r + 1u;
++        }
++        for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
++            const uint16_t r = ws_ui_prepass[i].ot_rank;
++            if (keep[i] && (r < p10 || (ws_ui_prepass[i].line && r < p90))) {
++                keep[i] = 0;
++                ws_ui_reject.behind++;
++            }
++        }
++    }
+     const int32_t small_w = ws_disp_w() / 4, small_h = ws_disp_h() / 4;
+-    for (int changed = 1; changed && backing_rank != 0xFFFFu;) {
++    for (int changed = 1; changed && backing_rank != 0xFFFFu && !provenance;) {
+         changed = 0;
+         for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
+             const WsUiPrepassItem *it = &ws_ui_prepass[i];
+@@ -6670,7 +7061,8 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+      * with the wide image while the frame around them squashes. */
+     for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
+         const WsUiPrepassItem *it = &ws_ui_prepass[i];
+-        if (!it->enclosed_only || it->ot_rank != max_rank) continue;
++        if (!it->enclosed_only || (!provenance && it->ot_rank != max_rank)) continue;
++        if (provenance && it->ot_rank < p10) continue;   /* behind the scene */
+         const int32_t x0 = it->group.x, x1 = it->group.x + it->group.width;
+         const int32_t y0 = it->y, y1 = it->y + it->h;
+         int32_t ux0 = 0, ux1 = 0, uy0 = 0, uy1 = 0;
+@@ -6731,6 +7123,10 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+         groups[i] = ws_ui_prepass[i].group;
+     ws_ui_group_assign(groups, ws_ui_prepass_count, ws_disp_w(),
+                        ws_auto_ui_dense, ws_auto_ui_in_place);
++    if (provenance) {
++        ws_ui_prepass_drop_upload_runs(groups, walk_area_left, walk_area_top);
++        if (ws_ui_prepass_count == 0) return;
++    }
+     for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
+         ws_ui_prepass[i].group.anchor = group_origin + groups[i].anchor;
+         ws_ui_prepass[i].group.root = groups[i].root;
+@@ -6761,6 +7157,15 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+             ws_ui_prepass[i].anchor_y = (y0 + y1) / 2 < half ? y0 : y1;
+         }
+     }
++    if (provenance) {
++        /* Geometry above is screen space; the draw path transforms packet
++         * coordinates, so store the anchors back relative to the packet. */
++        for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
++            ws_ui_prepass[i].group.anchor -= ws_ui_prepass[i].ox;
++            ws_ui_prepass[i].anchor_y -= ws_ui_prepass[i].oy;
++        }
++        ws_ui_prepass_follow(groups);
++    }
+ 
+     /* A shared counter can comprise many glyphs and shadow packets, none of
+      * which individually crosses the split. Classify the complete admitted
+diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
+index a4e23472..6ccc23a0 100644
+--- a/runtime/src/main.cpp
++++ b/runtime/src/main.cpp
+@@ -17675,6 +17675,7 @@ int main(int argc, char** argv) {
+             g_fmv_skip_no_xa_hold  = gc.runtime.video_fmv_skip_no_xa_hold;
+             g_ws_anchor_addr   = gc.ws_sprite_anchor_addr;
+             g_ws_hud_sprt      = gc.ws_hud_sprt_squash;
++            gpu_ws_set_auto_ui_provenance(gc.ws_auto_ui_provenance ? 1 : 0);
+             gpu_ws_set_auto_ui_squash(gc.ws_auto_ui_squash ? 1 : 0);
+             gpu_ws_set_auto_ui_in_place(gc.ws_auto_ui_in_place ? 1 : 0);
+             g_ws_auto_ui_proportional_cfg = gc.ws_auto_ui_proportional;
+diff --git a/runtime/src/pgxp.cpp b/runtime/src/pgxp.cpp
+index df92faf0..febee137 100644
+--- a/runtime/src/pgxp.cpp
++++ b/runtime/src/pgxp.cpp
+@@ -1817,6 +1817,13 @@ extern "C" int pgxp_get_precise_vertex(uint32_t addr, uint32_t packet_word,
+                                         x16, y16, sz, 0);
+ }
+ 
++extern "C" int pgxp_word_projected(uint32_t addr, uint32_t packet_word) {
++    if (!s_enabled || addr == 0xFFFFFFFFu) return 0;
++    const PGXPValue *pv = pgxp_ptr(addr);
++    return pv && pv->gen == s_gen && pv->value == packet_word &&
++           (pv->flags & PGXP_F_VXY) == PGXP_F_VXY;
++}
++
+ extern "C" int pgxp_probe_precise_vertex(uint32_t addr, uint32_t packet_word,
+                                          int32_t int_x, int32_t int_y) {
+     int32_t x16, y16;
+diff --git a/runtime/tests/gpu_exec_stubs.inc b/runtime/tests/gpu_exec_stubs.inc
+index 4b1e98d7..33f4a5f6 100644
+--- a/runtime/tests/gpu_exec_stubs.inc
++++ b/runtime/tests/gpu_exec_stubs.inc
+@@ -143,6 +143,13 @@ void psx_fatal_halt(const char *reason) {
+ 
+ static int fixture_pgxp_enabled;
+ void pgxp_set_enabled(int enabled) { fixture_pgxp_enabled = enabled; }
++int pgxp_enabled(void) { return fixture_pgxp_enabled; }
++/* auto_ui_provenance: GTE provenance of a packet word. No fixture packet
++ * carries a projection unless a test installs this hook. */
++static int (*fixture_word_projected)(uint32_t addr, uint32_t packet_word);
++int pgxp_word_projected(uint32_t addr, uint32_t packet_word) {
++    return fixture_word_projected ? fixture_word_projected(addr, packet_word) : 0;
++}
+ int gte_geometry_correction_enabled(void) { return g_test_geometry_correction; }
+ int pgxp_get_precise_vertex(uint32_t addr, uint32_t packet_word,
+                             int32_t int_x, int32_t int_y,
+@@ -362,8 +369,13 @@ void gr_draw_textured_rect_scaled(int x, int y, int w, int h,
+     last_scaled_rect.u1=u1; last_scaled_rect.v1=v1;
+     (void)v1; (void)clut_x; (void)clut_y; (void)texpage;
+ }
++/* Last line drawn (auto_ui_provenance outlines). */
++static struct { int calls, x0, y0, x1, y1; } gpu_exec_line;
+ void gr_draw_line(int x0, int y0, int x1, int y1, uint16_t color) {
+-    (void)x0; (void)y0; (void)x1; (void)y1; (void)color;
++    gpu_exec_line.calls++;
++    gpu_exec_line.x0 = x0; gpu_exec_line.y0 = y0;
++    gpu_exec_line.x1 = x1; gpu_exec_line.y1 = y1;
++    (void)color;
+ }
+ void gr_draw_shaded_line(int x0, int y0, uint16_t c0,
+                          int x1, int y1, uint16_t c1) {
+diff --git a/runtime/tests/test_ws_auto_ui_provenance_exec.c b/runtime/tests/test_ws_auto_ui_provenance_exec.c
+new file mode 100644
+index 00000000..9f2040c6
+--- /dev/null
++++ b/runtime/tests/test_ws_auto_ui_provenance_exec.c
+@@ -0,0 +1,179 @@
++#ifdef NDEBUG
++#undef NDEBUG
++#endif
++
++/* [widescreen] auto_ui_provenance: HUD against world by where vertices came
++ * from, not by ordering-table rank (Action Man: Mission Xtreme).
++ *
++ *  - An axis-aligned quad whose vertex words carry a GTE projection is world
++ *    geometry even right next to the HUD (the language screen's waving flag:
++ *    cells squashed as HUD left black holes that flickered as it waved).
++ *  - A HUD box drawn as a translucent fill plus GP0 0x40 line outline, at
++ *    different OT ranks, squashes as one widget: the outline moves with the
++ *    fill (the outlines were never admitted and stayed stretched).
++ *  - 2D drawn behind the 3D scene (a backdrop) is not HUD.
++ *  - A projected icon inside a small HUD box moves with the box (the vehicle
++ *    model in the HUD box drifted out of it).
++ *
++ * Drives the real path: an ordering-table linked list in guest RAM, the UI
++ * prepass, run grouping (real ws_ui_group.c), then GP0 execution. */
++
++#include <assert.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <string.h>
++
++#define GPU_EXEC_REAL_UI_GROUP
++#include "../src/gpu.c"
++
++#include "gpu_exec_stubs.inc"
++
++#define OT_HEAD    0x00010000u
++#define NODE_BACK  0x00010100u   /* 2D backdrop tile, behind the world      */
++#define NODE_GAP0  0x00010200u   /* empty: next rank                        */
++#define NODE_WORLD 0x00010300u   /* projected axis-aligned quad (flag cell) */
++#define NODE_ICON  0x00010380u   /* projected icon inside the HUD box        */
++#define NODE_GAP1  0x00010400u   /* empty: next rank                        */
++#define NODE_FILL  0x00010500u   /* HUD box fill (0x2A)                     */
++#define NODE_GAP2  0x00010600u   /* empty: next rank                        */
++#define NODE_LINE  0x00010700u   /* + 0x10 per outline line                 */
++
++static uint32_t pack_vertex(int16_t x, int16_t y) {
++    return (uint16_t)x | ((uint32_t)(uint16_t)y << 16);
++}
++
++static void put_node(uint32_t addr, uint32_t next, const uint32_t *words,
++                     uint32_t count) {
++    test_ram[addr / 4u] = (count << 24) | (next & 0xFFFFFFu);
++    for (uint32_t i = 0; i < count; i++)
++        test_ram[addr / 4u + 1u + i] = words[i];
++}
++
++static void put_quad(uint32_t node, uint32_t next, int16_t x0, int16_t x1,
++                     int16_t y0, int16_t y1, uint32_t cmd) {
++    const uint32_t q[5] = {
++        cmd, pack_vertex(x0, y0), pack_vertex(x1, y0),
++        pack_vertex(x0, y1), pack_vertex(x1, y1),
++    };
++    put_node(node, next, q, 5);
++}
++
++static int projected_word(uint32_t addr, uint32_t word) {
++    (void)word;
++    return (addr >= NODE_WORLD && addr < NODE_WORLD + 0x20u) ||
++           (addr >= NODE_ICON && addr < NODE_ICON + 0x20u);
++}
++
++/* HUD box [20,100) x [180,230) at the left of a 320-wide display: a fill at
++ * one rank and its four outline lines two ranks further front. */
++static void build(void) {
++    memset(test_ram, 0, sizeof(test_ram));
++    test_ram[OT_HEAD / 4u] = NODE_BACK;                     /* rank 0 */
++    put_quad(NODE_BACK, NODE_GAP0, 120, 140, 20, 40, 0x28202020u);
++    test_ram[NODE_GAP0 / 4u] = NODE_WORLD;                  /* rank 1 */
++    put_quad(NODE_WORLD, NODE_ICON, 100, 112, 160, 170, 0x28FF0000u);
++    put_quad(NODE_ICON, NODE_GAP1, 50, 70, 195, 215, 0x2800FF00u);
++    test_ram[NODE_GAP1 / 4u] = NODE_FILL;                   /* rank 2 */
++    /* Opaque here so the stub records it as triangles (a translucent fill
++     * draws through gr_draw_flat_rect); classification is the same. */
++    put_quad(NODE_FILL, NODE_GAP2, 20, 100, 180, 230, 0x28404040u);
++    test_ram[NODE_GAP2 / 4u] = NODE_LINE;                   /* rank 3 */
++    const int16_t lines[4][4] = {
++        {20, 180, 100, 180}, {20, 230, 100, 230},
++        {20, 180, 20, 230}, {100, 180, 100, 230},
++    };
++    for (int i = 0; i < 4; i++) {
++        const uint32_t w[3] = {
++            0x40FFFFFFu, pack_vertex(lines[i][0], lines[i][1]),
++            pack_vertex(lines[i][2], lines[i][3]),
++        };
++        put_node(NODE_LINE + 0x10u * (uint32_t)i,
++                 i < 3 ? NODE_LINE + 0x10u * (uint32_t)(i + 1) : 0xFFFFFFu, w, 3);
++    }
++}
++
++static void load_packet(uint32_t node, uint32_t count) {
++    for (uint32_t i = 0; i < count; i++)
++        gp0_cmd_buf[i] = test_ram[node / 4u + 1u + i];
++    gp0_cmd_source_addr = node + 4u;
++    gp0_words_needed = (int)count;
++}
++
++static void reset_state(int provenance) {
++    s_frame_count = 100;
++    draw_offset_x = draw_offset_y = 0;
++    draw_area_left = 0; draw_area_top = 0;
++    draw_area_right = 1023; draw_area_bottom = 511;
++    hres1 = 1; hres2 = 0; video_mode = 0; display_depth = 0;
++    display_disabled = 0; display_area_x = 0; display_area_y = 0;
++    h_display_x1 = 0x200; h_display_x2 = 0xC00;
++    v_display_y1 = 0x010; v_display_y2 = 0x100;
++    /* Projection-and-stretch path at 16:9: X squash 3/4, not native-wide. */
++    ws_mode = 0;
++    ws_cfg_num = 16; ws_cfg_den = 9;
++    ws_xnum = 3; ws_xden = 4;
++    ws_full_2d = 0;
++    fixture_word_projected = projected_word;
++    gpu_ws_set_auto_ui_squash(1);
++    gpu_ws_set_auto_ui_in_place(0);
++    gpu_ws_set_auto_ui_proportional(0);
++    gpu_ws_set_auto_ui_provenance(provenance);
++    pgxp_set_enabled(provenance);
++}
++
++static int quad_min_x(uint32_t node) {
++    gpu_exec_reset_triangles();
++    load_packet(node, 5);
++    gp0_exec_mono_quad();
++    assert(gpu_exec_triangles.calls >= 1);
++    return gpu_exec_triangles.min_x;
++}
++
++static int line_x0(int i) {
++    gpu_exec_line.calls = 0;
++    load_packet(NODE_LINE + 0x10u * (uint32_t)i, 3);
++    gp0_exec_mono_line();
++    assert(gpu_exec_line.calls == 1);
++    return gpu_exec_line.x0;
++}
++
++int main(void) {
++    /* Rank-based (provenance off): only the front rank, the outline lines,
++     * is a candidate, and lines are not admitted at all. */
++    reset_state(0);
++    build();
++    gpu_ws_prepass_linked_list(OT_HEAD);
++    assert(ws_ui_prepass_count == 0);
++    assert(line_x0(2) == 20);                      /* outline stays wide */
++
++    reset_state(1);
++    build();
++    gpu_ws_prepass_linked_list(OT_HEAD);
++    assert(ws_ui_provenance());
++    assert(ws_ui_reject.world == 2);               /* world cell + icon */
++    assert(ws_ui_reject.behind == 1);              /* the backdrop tile */
++    assert(ws_ui_reject.follow == 1);              /* the icon follows the box */
++    assert(ws_ui_prepass_count == 1 + 4 + 1);      /* fill + 4 lines + icon */
++
++    /* The box squashes toward the left edge, its outline with it. */
++    const int32_t left = ws_disp_x();
++    const int fill_x = quad_min_x(NODE_FILL);
++    assert(fill_x == ws_scale_about(20, left));
++    assert(line_x0(2) == fill_x);                  /* left edge */
++    assert(line_x0(3) == ws_scale_about(100, left)); /* right edge */
++    assert(line_x0(0) == fill_x);                  /* top edge start */
++
++    /* World geometry next to the HUD is untouched; the backdrop too. */
++    assert(quad_min_x(NODE_WORLD) == 100);
++    assert(quad_min_x(NODE_BACK) == 120);
++
++    /* The projected icon was squashed about the display centre with the
++     * world (c + (x - c) * 3/4); it moves by (left - c) * (1 - 3/4) so it
++     * lands where the box's own transform puts that point. */
++    const int c = 160;
++    const int icon_x = quad_min_x(NODE_ICON);
++    assert(icon_x == 50 + (int)lround((left - c) * 0.25));
++
++    printf("ws_auto_ui_provenance_exec_test: PASS\n");
++    return 0;
++}
+-- 
+2.43.0
+
