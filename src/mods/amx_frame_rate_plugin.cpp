@@ -20,6 +20,8 @@
  * the section with GTE projections placed between the last two frames, and
  * submits the result into that waiting rect with the game's own calls.
  */
+extern "C" uint32_t psx_projection_replay_kept_total(void);
+
 namespace {
 constexpr uint32_t Start = 0x0002BFC4, StartWord = 0x0C009847;  // jal 0x0002611C
 constexpr uint32_t Stop = 0x0002BFD4;                            // after jal 0x0002DC40
@@ -34,6 +36,12 @@ constexpr uint32_t FlushOT = 0x00023438;  // finalize OT + DrawOTag
 // voice" (-1), the game's own result when every voice is busy; SPU writes are
 // dropped by the sandbox anyway and RAM is restored after the pass.
 constexpr uint32_t PlaySound = 0x0007ABDC;
+// libspu SpuSetMute(on_off): read-modify-write of SPUCNT (0x1F801DAA), which a
+// pass may not read. The game logic calls it through 0x0007B888/0x0007B8A8
+// while driving on City streets; inside a pass return its result (on_off)
+// untouched. Without this every pass there faulted and passes switched
+// themselves off for the session after eight.
+constexpr uint32_t SpuSetMute = 0x0008CD60;
 // libcd primitives behind CdControl/CdControlB/CdControlF/CdSync/CdReady
 // (XA music control from the game logic). Inside a pass the CD registers are
 // off limits and its interrupts never arrive, so answer as an idle drive:
@@ -91,6 +99,12 @@ int pass(CPUState* cpu, void*, uint32_t alpha) {
         held.clear();
     }
     psx_mod_counter_add("amx.fr.interpolated_projections", replay.stats.replayed);
+    {
+        static uint32_t last = 0;
+        const uint32_t now = psx_projection_replay_kept_total();
+        psx_mod_counter_add("amx.fr.replay_kept", now - last);
+        last = now;
+    }
     return 1;
 }
 
@@ -106,6 +120,7 @@ void finish(CPUState* cpu, uint32_t) {
     psx_mod_counter_add("amx.fr.projections", replay.stats.captured);
     psx_mod_counter_add("amx.fr.matched", replay.stats.matched);
     psx_mod_counter_add("amx.fr.moving", replay.stats.changed);
+    psx_mod_counter_add("amx.fr.cuts", replay.stats.discontinuities);
     if (!ready) return;
     const uint32_t disp = DispEnv + DispStride * index_now();
     PSXModRenderPassFrame frame{};
@@ -121,6 +136,12 @@ void finish(CPUState* cpu, uint32_t) {
 void play_sound(CPUState* cpu, uint32_t) {
     if (!g_psx_render_pass_active) return;
     cpu->gpr[2] = 0xFFFFFFFFu;
+    psx_mod_finish_function(cpu);
+}
+
+void spu_set_mute(CPUState* cpu, uint32_t) {
+    if (!g_psx_render_pass_active) return;
+    cpu->gpr[2] = cpu->gpr[4];
     psx_mod_finish_function(cpu);
 }
 
@@ -157,12 +178,20 @@ void cd_ready(CPUState* cpu, uint32_t) {
 
 void activate(unsigned fps) {
     replay.invalidate();
+    // The top-down City camera turns up to ~20 degrees a frame high above the
+    // street; at the default 512 units/tick those turns moved distant
+    // geometry past the cut limit and every such frame snapped instead of
+    // blending (an in-between frame that sat on the previous one).
+    replay.max_move = 8192.0;
     vblanks = 0;
     PSXDrawReplay::rate(fps, PSX_MOD_RENDER_PASS_FLIP_PENDING);
 }
 void display() { activate(0); }
+void rate50() { activate(50); }
 void rate60() { activate(60); }
+void rate75() { activate(75); }
 void rate90() { activate(90); }
+void rate100() { activate(100); }
 void rate120() { activate(120); }
 void rate144() { activate(144); }
 void rate165() { activate(165); }
@@ -170,16 +199,19 @@ void rate240() { activate(240); }
 }  // namespace
 
 PSX_MOD_CONSTRUCTOR(amx_register_frame_rate_plugins) {
-    const char* ids[] = {"amx.framerate.display", "amx.framerate.60", "amx.framerate.90",
+    const char* ids[] = {"amx.framerate.display", "amx.framerate.50", "amx.framerate.60",
+                         "amx.framerate.75", "amx.framerate.90", "amx.framerate.100",
                          "amx.framerate.120", "amx.framerate.144", "amx.framerate.165",
                          "amx.framerate.240"};
-    void (*callbacks[])() = {display, rate60, rate90, rate120, rate144, rate165, rate240};
+    void (*callbacks[])() = {display, rate50, rate60, rate75, rate90, rate100,
+                             rate120, rate144, rate165, rate240};
     for (unsigned i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i) {
         psx_mod_register_activation_plugin(ids[i], callbacks[i]);
         psx_mod_register_vblank_plugin(ids[i], tick);
         psx_mod_register_instruction_plugin(ids[i], Start, StartWord, begin);
         psx_mod_register_function_entry_plugin(ids[i], Submit, finish);
         psx_mod_register_function_entry_plugin(ids[i], PlaySound, play_sound);
+        psx_mod_register_function_entry_plugin(ids[i], SpuSetMute, spu_set_mute);
         psx_mod_register_function_entry_plugin(ids[i], CdCommand, cd_command);
         psx_mod_register_function_entry_plugin(ids[i], CdSyncWait, cd_sync);
         psx_mod_register_function_entry_plugin(ids[i], CdReadyPoll, cd_ready);

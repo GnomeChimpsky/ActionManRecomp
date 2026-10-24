@@ -32,12 +32,24 @@ value = "display"
 label = "Display refresh (Recommended)"
 
 [[option.choice]]
+value = "50"
+label = "50 FPS (1 per game frame)"
+
+[[option.choice]]
 value = "60"
 label = "60 FPS"
 
 [[option.choice]]
+value = "75"
+label = "75 FPS (3 per game frame)"
+
+[[option.choice]]
 value = "90"
 label = "90 FPS"
+
+[[option.choice]]
+value = "100"
+label = "100 FPS (4 per game frame)"
 
 [[option.choice]]
 value = "120"
@@ -62,13 +74,28 @@ when = { rate = "display" }
 
 [[plugin]]
 feature = "interpolated-rendering"
+id = "amx.framerate.50"
+when = { rate = "50" }
+
+[[plugin]]
+feature = "interpolated-rendering"
 id = "amx.framerate.60"
 when = { rate = "60" }
 
 [[plugin]]
 feature = "interpolated-rendering"
+id = "amx.framerate.75"
+when = { rate = "75" }
+
+[[plugin]]
+feature = "interpolated-rendering"
 id = "amx.framerate.90"
 when = { rate = "90" }
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.100"
+when = { rate = "100" }
 
 [[plugin]]
 feature = "interpolated-rendering"
