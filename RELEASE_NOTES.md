@@ -5,6 +5,7 @@
 **Downloads**:
 
 - `Action-Man-Recomp-0.4.5-windows-x64.zip`
+- `Action-Man-Recomp-0.4.5-linux-x64.zip`
 
 **Changes since 0.4.4**
 
@@ -16,7 +17,7 @@
 - Frame Rate mod: the real game frame is now shown between the in-betweens,
   and presents are locked to the emulated VBlanks, which removes most of the
   judder on City streets.
-- The Windows zip bundles Python and TinyCC for the level-code toolchain;
+- Both zips bundle Python and TinyCC for the level-code toolchain;
   nothing has to be downloaded.
 
 **Known issues.** As in 0.4.4, plus minor HUD glitches due to widescreen
