@@ -41,6 +41,71 @@ No developer tools are needed to play. To update, extract the new version
 over the old folder. Level code compiled by an older version (`cache/`) is
 ignored and rebuilt automatically.
 
+### Launcher settings
+
+The launcher opens before the game. Its **Settings** pages cover:
+
+- **Video** – renderer (OpenGL is recommended), window size and
+  fullscreen, internal resolution (up to 8K, default 1440p), antialiasing,
+  texture and FMV filtering, screen model and scanlines, VSync, and the
+  *Render thread*, *Present thread* and *Smooth motion* options. Leave
+  *Smooth motion* off and use the Frame Rate mod instead.
+- **Audio** – volume and high-quality SPU (sound chip) emulation.
+- **Input** – DualShock analog or digital pad, button bindings and
+  analog deadzone.
+- **System** – BIOS choice (the included OpenBIOS works).
+- **Hotkeys** – the keyboard shortcuts below, which can be rebound.
+
+### Mods
+
+The **Mods** page lists the bundled mods. All are off until you enable them:
+
+- **Action Man Widescreen** – 16:9, 21:9 or *Adaptive* (follows the window
+  shape), with the HUD kept at its original proportions.
+- **Action Man Frame Rate** – draws extra in-between frames up to your
+  display rate or a fixed 50 – 240 fps, while game logic, timers and audio
+  keep their original pace. Needs OpenGL; see [Frame rate](#frame-rate).
+- **Action Man FMV Skipping** – fast-forwards the full-motion videos.
+- **PGXP Precision** – sub-pixel vertex precision and perspective-correct
+  textures to reduce polygon wobble. Needs supersampling of 2× or more.
+- **CD Speed** – shortens loading by speeding up the emulated CD drive.
+  Raise it gradually; very high values can stall a load.
+- **HD Texture Packs** – loads DuckStation-compatible replacement textures
+  (OpenGL) or dumps the originals. No artwork is included.
+- **Bezel Artwork** – shows an image of your choice in the black side bars.
+- **8 MB Main RAM** and **Fast Loading (host pacing)** – generic options that
+  Action Man does not need.
+
+### Hotkeys
+
+Defaults (change them under **Settings › Hotkeys**):
+
+- **Tab** – hold to speed up the game (fast-forward).
+- **F7** – save states. Savestates are tied to the exact build and do not
+  load across versions.
+
+## Known issues
+
+- **Vertex wobble.** As on the original hardware, 3D vertices snap to whole
+  pixels and textures are not perspective-correct, so polygons visibly wobble
+  and swim, more noticeably at high resolution and with the Frame Rate mod.
+  The bundled PGXP mod targets this but has not been evaluated in depth for
+  this game.
+- **No verified complete playthrough.** Only the front end, the city driving
+  mission and the attract-mode levels have been tested. Later missions may
+  have bugs; reports are welcome.
+- **In-game options are not saved between sessions.**
+- **Uneven frame pacing in some levels.**
+- **The first-person HUD when aiming the bow is missing some graphical
+  elements.**
+- **Level code runs on the interpreter on its first visit** until it has been
+  compiled in the background, which can cost performance on slow machines.
+- **The Linux build** has been tested in a virtual display only; reports from
+  real Linux desktops and the Steam Deck are welcome.
+- **Savestates** do not load across builds.
+- **Native Windows/macOS builds** of this repository are untested; Windows
+  binaries are cross-compiled from Linux.
+
 ## Status
 
 | Area | State |
@@ -238,28 +303,6 @@ the two frames, and submits the result with the game's own calls. Game logic,
 timers and audio keep their original pace. Use it with the OpenGL renderer and
 leave *Smooth motion* off (that generic option causes stutter and texture
 flicker in this game).
-
-## Known issues
-
-- **Vertex wobble.** As on the original hardware, 3D vertices snap to whole
-  pixels and textures are not perspective-correct, so polygons visibly wobble
-  and swim, more noticeably at high resolution and with the Frame Rate mod.
-  The bundled PGXP mod targets this but has not been evaluated in depth for
-  this game.
-- **No verified complete playthrough.** Only the front end, the city driving
-  mission and the attract-mode levels have been tested. Later missions may
-  have bugs; reports are welcome.
-- **In-game options are not saved between sessions.**
-- **Uneven frame pacing in some levels.**
-- **The first-person HUD when aiming the bow is missing some graphical
-  elements.**
-- **Level code runs on the interpreter on its first visit** until it has been
-  compiled in the background, which can cost performance on slow machines.
-- **The Linux build** has been tested in a virtual display only; reports from
-  real Linux desktops and the Steam Deck are welcome.
-- **Savestates** do not load across builds.
-- **Native Windows/macOS builds** of this repository are untested; Windows
-  binaries are cross-compiled from Linux.
 
 ## Distribution
 
