@@ -65,6 +65,10 @@ The **Mods** page lists the bundled mods. All are off until you enable them:
 - **Action Man Frame Rate** – draws extra in-between frames at 50 FPS
   (default, recommended) or 100 FPS, while game logic, timers and audio
   keep their original pace. Needs OpenGL; see [Frame rate](#frame-rate).
+- **Action Man Cheats** – in the *Cheats* group: *Invincibility* (health
+  refills instead of running out), *All weapons* (every weapon with full ammo
+  once a mission starts) and *Easy Mode*. They switch on the game's own
+  developer options.
 - **PGXP Precision** – sub-pixel vertex precision and perspective-correct
   textures to reduce polygon wobble. Needs supersampling of 2× or more.
 - **CD Speed** – shortens loading by speeding up the emulated CD drive.

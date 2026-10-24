@@ -1,0 +1,45 @@
+format_version = 5
+id = "amx.cheats"
+version = "1.0.0"
+name = "Action Man Cheats"
+author = "ActionManRecomp"
+description = "Switches on cheats built into the game's own developer options."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLES-01761"
+disc_sha256 = "6ec5784d3a359595083284fafe663f642dc68f801793a331dd478414f22ee341"
+
+[[feature]]
+id = "invincibility"
+name = "Invincibility"
+description = "Action Man's health refills instead of running out (the developer menu's \"AM infinite health\")."
+group = "Cheats"
+default_enabled = false
+
+[[feature]]
+id = "all-weapons"
+name = "All weapons"
+description = "Every weapon is added with full ammo once a mission starts. Weapons you already carry are left as they are."
+group = "Cheats"
+default_enabled = false
+
+[[feature]]
+id = "easy-mode"
+name = "Easy Mode"
+description = "The developer menu's Easy Mode."
+group = "Cheats"
+default_enabled = false
+
+[[plugin]]
+feature = "invincibility"
+id = "amx.cheats.invincibility"
+
+[[plugin]]
+feature = "all-weapons"
+id = "amx.cheats.all-weapons"
+
+[[plugin]]
+feature = "easy-mode"
+id = "amx.cheats.easy-mode"

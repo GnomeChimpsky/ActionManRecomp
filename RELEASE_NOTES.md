@@ -13,6 +13,8 @@
 - Mods: *Action Man FMV Skipping* and *Bezel Artwork* are removed.
 - Mods: *Action Man Widescreen* and *Action Man Frame Rate* are now
   version 1.1.0.
+- Mods: new *Action Man Cheats* (Cheats group): Invincibility, All weapons
+  and Easy Mode, built on the game's own developer options.
 
 **Known issues**
 
