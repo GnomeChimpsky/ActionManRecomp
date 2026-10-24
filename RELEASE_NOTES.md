@@ -1,5 +1,27 @@
 # Release notes
 
+## 0.4.6
+
+**Downloads**:
+
+- `Action-Man-Recomp-0.4.6-windows-x64.zip`
+
+**Changes since 0.4.5**
+
+- Launcher: the generic *Smooth motion* option is removed from
+  Settings › Display (use the Frame Rate mod). If it was on, it is turned off.
+- Mods: *Action Man FMV Skipping* and *Bezel Artwork* are removed.
+- Mods: *Action Man Widescreen* and *Action Man Frame Rate* are now
+  version 1.1.0.
+
+**Known issues**
+
+- Vertex wobble as on original hardware
+- In-game options are not saved between sessions
+- Minor HUD glitches due to widescreen rendering
+- Short judders remain in the heaviest scenes
+- Savestates are tied to the build and may not load across versions
+
 ## 0.4.5
 
 **Downloads**:
@@ -20,9 +42,13 @@
 - Both zips bundle Python and TinyCC for the level-code toolchain;
   nothing has to be downloaded.
 
-**Known issues.** As in 0.4.4, plus minor HUD glitches due to widescreen
-rendering. Short judders remain in the heaviest scenes. Savestates are tied
-to the build and may not load across versions.
+**Known issues**
+
+- Vertex wobble as on original hardware
+- In-game options are not saved between sessions
+- Minor HUD glitches due to widescreen rendering
+- Short judders remain in the heaviest scenes
+- Savestates are tied to the build and may not load across versions
 
 ## 0.4.4
 

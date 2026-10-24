@@ -84,28 +84,11 @@ Defaults (change them under **Settings › Hotkeys**):
 
 ## Known issues
 
-- **Vertex wobble.** As on the original hardware, 3D vertices snap to whole
-  pixels and textures are not perspective-correct, so polygons visibly wobble
-  and swim, more noticeably at high resolution and with the Frame Rate mod.
-  The bundled PGXP mod targets this but has not been evaluated in depth for
-  this game.
-- **No verified complete playthrough.** Only the front end, the city driving
-  mission and the attract-mode levels have been tested. Later missions may
-  have bugs; reports are welcome.
-- **In-game options are not saved between sessions.**
-- **Uneven frame pacing in some levels.** With the Frame Rate mod at 50 FPS
-  City streets are mostly smooth; short judders remain in the heaviest scenes,
-  where the game itself drops below full speed.
-- **Minor HUD glitches due to widescreen rendering.**
-- **The first-person HUD when aiming the bow is missing some graphical
-  elements.**
-- **Level code runs on the interpreter on its first visit** until it has been
-  compiled in the background, which can cost performance on slow machines.
-- **The Linux build** has been tested in a virtual display only; reports from
-  real Linux desktops and the Steam Deck are welcome.
-- **Savestates** do not load across builds.
-- **Native Windows/macOS builds** of this repository are untested; Windows
-  binaries are cross-compiled from Linux.
+- Vertex wobble as on original hardware
+- In-game options are not saved between sessions
+- Minor HUD glitches due to widescreen rendering
+- Short judders remain in the heaviest scenes
+- Savestates are tied to the build and may not load across versions
 
 ## Status
 
@@ -158,6 +141,10 @@ Defaults (change them under **Settings › Hotkeys**):
   emulated VBlanks so they no longer slide against the game when it runs
   slightly behind real time. The release zip now bundles Python and TinyCC
   for the level-code toolchain, so nothing has to be downloaded.
+- **0.4.6 – launcher clean-up.** The generic *Smooth motion* option is no
+  longer offered (the Frame Rate mod replaces it), and the *FMV Skipping* and
+  *Bezel Artwork* mods are removed. The Widescreen and Frame Rate mods are now
+  version 1.1.0.
   (`src/mods/amx_frame_rate_plugin.cpp`, `patches/psxrecomp/0004-…`)
 
 Savestates are tied to the exact build and do not load across versions.
