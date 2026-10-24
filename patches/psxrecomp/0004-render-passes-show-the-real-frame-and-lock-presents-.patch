@@ -1,0 +1,337 @@
+From 3bec1f1bc26f7d712ebdeaf3b9a8fa23dbdc6b3f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 19:00:46 +0000
+Subject: [PATCH] render passes: show the real frame and lock presents to
+ VBlanks
+
+Three presentation fixes for render-pass frame interpolation, found on
+Action Man: Mission Xtreme (PAL, 25 fps game, Frame Rate mod):
+
+- A schedule deadline ends the output period it fills, but
+  pass_gen_present read it as that period's start. At 50 FPS the
+  presents fell at phases 0.5 and 1.0, so the in-between was shown
+  twice and the real frame never; at 100 the real frame was up for
+  ~5 ms of 40. Read each deadline as the start of its period, and plan
+  pass phases on the same origin.
+- At output rates that are a whole multiple of the VBlank rate (50, 100
+  on PAL) take the generation phase from the VBlank count and re-lock
+  the output grid to each source interval. When a heavy scene ran the
+  guest at 0.98x, the free-running clock slid against the VBlanks: two
+  presents landed in one VBlank and none in the next, scrambling the
+  order for seconds at a time.
+- Allow 50 FPS interpolation (one in-between per 25 fps PAL frame).
+
+Also: PSXDrawReplay::max_move (per-title cut limit), and diagnostics
+for debug builds: PSX_RENDER_PASS_ALPHA (force a pass phase),
+psx_projection_replay_kept_total(), PSX_PRESENT_LOG (one line per
+swap), and render_pass_dump file names carrying the generation order
+and period.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01QwPTgFkfWXATrAfYHXR5kA
+---
+ runtime/include/render_pass_replay.hpp |   6 +-
+ runtime/src/gpu_gl_renderer.c          | 106 +++++++++++++++++++++++--
+ runtime/src/main.cpp                   |   4 +-
+ runtime/src/render_pass_projection.cpp |  20 ++++-
+ 4 files changed, 124 insertions(+), 12 deletions(-)
+
+diff --git a/runtime/include/render_pass_replay.hpp b/runtime/include/render_pass_replay.hpp
+index 71c9b1af..4b72f7a7 100644
+--- a/runtime/include/render_pass_replay.hpp
++++ b/runtime/include/render_pass_replay.hpp
+@@ -28,6 +28,10 @@ class PSXDrawReplay {
+ public:
+     PSXProjectionStats stats{};
+     uint32_t ticks = 0;
++    // Largest per-tick change of a projection's translation still blended;
++    // above it the projection is treated as a cut and shown at its new
++    // position. Camera-space, so a turning camera moves distant objects far.
++    double max_move = 512.0;
+     ~PSXDrawReplay() { psx_projection_destroy(history); }
+     void invalidate() {
+         captured = ready = have_tick = false; ticks = 0;
+@@ -58,7 +62,7 @@ public:
+         ticks = have_tick ? tick - previous_tick : 0;
+         previous_tick = tick; have_tick = true;
+         if (projections) {
+-            psx_projection_capture_end(history, ticks, 512.0);
++            psx_projection_capture_end(history, ticks, max_move);
+             psx_projection_stats(history, &stats);
+         }
+         ready = ticks && ticks <= 8 && (projections
+diff --git a/runtime/src/gpu_gl_renderer.c b/runtime/src/gpu_gl_renderer.c
+index 037b6c6b..fa18203c 100644
+--- a/runtime/src/gpu_gl_renderer.c
++++ b/runtime/src/gpu_gl_renderer.c
+@@ -674,7 +674,15 @@ static void pass_gens_invalidate(void);
+ static void pass_note_new_frame(int origin_x, int origin_y, int source_path,
+                                 int pw, int ph);
+ static void pass_apply_promotion(void);
+-static int pass_gen_present(uint64_t deadline);
++static int pass_gen_present(uint64_t deadline, double frame_p);
++static uint32_t interp_presents_per_interval(void);
++static double pass_frame_phase(void);
++static uint32_t s_interval_presents;   /* presents made in this source interval */
++/* PSX_PRESENT_LOG: the last render-pass present (see present_log_swap). */
++static int      s_plog_pass = 0;
++static uint64_t s_plog_order = 0;
++static double   s_plog_p = 0.0;
++static uint32_t s_plog_lo = 0, s_plog_n = 0;
+ static int stereo_present(int w, int h);
+ static int xr_mirror_mode(void);
+ static int xr_mirror_active(void);
+@@ -7811,14 +7819,23 @@ static void interp_present_source_interval(void) {
+             s_interp_phase_lo, s_interp_phase_hi))
+         return;
+     pass_apply_promotion();
++    /* A whole-multiple rate keeps its output grid on the source interval:
++     * exactly m deadlines, the last at the interval's end. */
++    s_interval_presents = 0;
++    if (interp_presents_per_interval())
++        s_interp_schedule.next_present_deadline =
++            s_interp_schedule.frame_start + s_interp_schedule.target_period;
+ 
+     while (frame_interpolation_schedule_next(
+                &s_interp_schedule, SDL_GetPerformanceCounter(),
+                &deadline, &alpha)) {
++        const double frame_p = pass_frame_phase();
++        if (frame_p == -2.0) continue;   /* this VBlank's presents are made */
+         interp_wait_until(deadline, frequency);
+         latency_ring_mark(LAT_SWAP_BEGIN);
+-        if (!pass_gen_present(deadline))
++        if (!pass_gen_present(deadline, frame_p))
+             (void)interp_present(alpha);
++        s_interval_presents++;
+         latency_ring_mark(LAT_SWAP_END);
+     }
+     interp_wait_until(frame_interpolation_schedule_end(&s_interp_schedule),
+@@ -8091,8 +8108,11 @@ uint32_t gl_renderer_pass_plan(uint32_t period_vblanks,
+     memset(&in, 0, sizeof in);
+     in.next_deadline = s_interp_schedule.next_present_deadline;
+     in.target_period = s_interp_schedule.target_period;
++    /* The presenter reads each deadline as the start of the output period
++     * it ends (pass_gen_present): plan the phases it will ask for. */
+     in.frame_start = s_interp_schedule.source_deadline +
+-                     (double)shown_after_vblanks * sp;
++                     (double)shown_after_vblanks * sp +
++                     s_interp_schedule.target_period;
+     in.frame_length = (double)period_vblanks * sp;
+     in.pass_cost = (s_pass_cost_w == s_interp_w && s_pass_cost_h == s_interp_h)
+                    ? render_pass_cost_estimate(&s_pass_cost) : 0.0;
+@@ -9157,7 +9177,27 @@ static int xr_mirror_active(void) {
+ /* Draw two presented images crossfaded (t = weight of b) into the window. */
+ static int interp_present_pair(GLuint a, GLuint b, float t, int blend_mode);
+ 
+-static int pass_gen_present(uint64_t deadline) {
++/* Output presents per source interval when the output rate is a whole
++ * multiple of the guest VBlank rate (50 FPS on PAL = 1, 100 = 2), else 0. */
++static uint32_t interp_presents_per_interval(void) {
++    double m;
++    if (!(s_interp_source_hz > 0.0) || !(s_interp_target_hz > 0.0)) return 0;
++    m = s_interp_target_hz / s_interp_source_hz;
++    if (m < 0.5 || fabs(m - floor(m + 0.5)) > 1e-3) return 0;
++    return (uint32_t)floor(m + 0.5);
++}
++/* The generation phase of the next present of this interval, counted in
++ * VBlanks rather than read from the host clock: -1 = use the clock (rates
++ * that are not a whole multiple), -2 = this interval's presents are done. */
++static double pass_frame_phase(void) {
++    const uint32_t m = interp_presents_per_interval();
++    if (!m) return -1.0;
++    if (s_interval_presents >= m) return -2.0;
++    return s_interp_phase_lo + (s_interp_phase_hi - s_interp_phase_lo) *
++           ((double)s_interval_presents / (double)m);
++}
++
++static int pass_gen_present(uint64_t deadline, double frame_p) {
+     PassGen *g = &s_pgen[s_pgen_cur];
+     uint32_t lo = 0, hi = 0;
+     float t = 0.0f;
+@@ -9166,7 +9206,22 @@ static int pass_gen_present(uint64_t deadline) {
+     if (g->source_path != s_interp_source_path || g->tex_w != s_interp_w ||
+         g->tex_h != s_interp_h)
+         return 0;
+-    p = ((double)deadline - g->t_start) / g->t_len;
++    /* A deadline ends the output period it fills: the schedule's first
++     * deadline in a promoted interval lies one target period after the
++     * interval starts, and the generation's last one at its very end. Read
++     * each deadline as the start of the period it ends, so the real frame
++     * (phase 0) is shown first and the in-betweens follow at the phases they
++     * were drawn for. Without this the real frame was never shown at 50 FPS
++     * (deadlines at p = 0.5 and 1.0 both showed the in-between) and only for
++     * a few milliseconds at 100. */
++    p = ((double)deadline - s_interp_schedule.target_period - g->t_start) / g->t_len;
++    if (p < 0.0) p = 0.0;
++    /* A whole-multiple rate takes the phase from the VBlank count instead:
++     * when the guest runs a little behind the host clock (a heavy scene at
++     * 0.98x), clock phases slid against the VBlanks and two presents landed
++     * in one VBlank, the next none -- the in-between shown twice and the
++     * real frame not at all, for seconds at a time. */
++    if (frame_p >= 0.0 && p <= RENDER_PASS_GEN_HOLD_MAX) p = frame_p;
+     /* Past phase 1 the next flip is late (a lagging tick): the newest image
+      * holds until it comes. Only a game that stops flipping for several
+      * frame lengths expires the generation. */
+@@ -9175,6 +9230,8 @@ static int pass_gen_present(uint64_t deadline) {
+         s_pgen_expired++;
+         return 0;
+     }
++    s_plog_pass = 1; s_plog_order = g->order; s_plog_p = p;
++    s_plog_lo = lo; s_plog_n = g->n;
+     if (!interp_present_pair(s_pgen_tex[s_pgen_cur][lo],
+                              s_pgen_tex[s_pgen_cur][hi], t, s_interp_blend_mode))
+         return 0;
+@@ -9193,13 +9250,18 @@ void gl_renderer_pass_service_presents(void) {
+     double sp;
+     if (!gl_renderer_pass_ready() || s_pass_active) return;
+     sp = (double)SDL_GetPerformanceFrequency() / s_interp_source_hz;
++    /* Frame-locked rates present only this interval's own deadlines here. */
++    if (interp_presents_per_interval()) sp = 0.0;
+     while (frame_interpolation_schedule_due(
+                &s_interp_schedule, SDL_GetPerformanceCounter(),
+                s_interp_schedule.frame_end + sp, &deadline)) {
++        const double frame_p = pass_frame_phase();
++        if (frame_p == -2.0) break;
+         latency_ring_mark(LAT_SWAP_BEGIN);
+-        if (!pass_gen_present(deadline)) { latency_ring_mark(LAT_SWAP_END); break; }
++        if (!pass_gen_present(deadline, frame_p)) { latency_ring_mark(LAT_SWAP_END); break; }
+         latency_ring_mark(LAT_SWAP_END);
+         frame_interpolation_schedule_consume(&s_interp_schedule);
++        s_interval_presents++;
+         s_pgen_early++;
+     }
+ }
+@@ -9294,9 +9356,12 @@ static void pass_dump_generation(int gi) {
+         FILE *f;
+         glBindTexture(GL_TEXTURE_2D, s_pgen_tex[gi][i]);
+         glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE, rgb);
+-        snprintf(path, sizeof path, "%s/g%03llu_%02u_a%05u.png", s_pdump_dir,
++        /* o<order>: the generation's open sequence, so a generation that
++         * was never promoted shows as a gap; p<period>: its VBlanks. */
++        snprintf(path, sizeof path, "%s/g%03llu_%02u_a%05u_o%06llu_p%u.png", s_pdump_dir,
+                  (unsigned long long)s_pdump_gen, (unsigned)i,
+-                 (unsigned)g->phase[i]);
++                 (unsigned)g->phase[i], (unsigned long long)g->order,
++                 (unsigned)g->period);
+         f = fopen(path, "wb");
+         if (f) { (void)png_write_rgb(f, rgb, (uint32_t)g->tex_w, (uint32_t)g->tex_h); fclose(f); }
+     }
+@@ -9909,6 +9974,29 @@ static void gl_swap_with_osd(void) {
+     gl_swap_now(s_fg_presenting);
+ }
+ 
++/* PSX_PRESENT_LOG=<file> (diagnostic): one line per swap -- host time before
++ * and after the swap (us), guest frame, present path, and for a render-pass
++ * present the generation order, its phase p and the image index shown. */
++static FILE    *s_plog = NULL;
++static int      s_plog_init = 0;
++static void present_log_swap(uint64_t t0, uint64_t t1) {
++    if (!s_plog_init) {
++        const char *e = getenv("PSX_PRESENT_LOG");
++        s_plog_init = 1;
++        if (e && *e) {
++            s_plog = fopen(e, "w");
++            if (s_plog) setvbuf(s_plog, NULL, _IOFBF, 1 << 20);
++        }
++    }
++    if (!s_plog) return;
++    const double us = 1.0e6 / (double)SDL_GetPerformanceFrequency();
++    fprintf(s_plog, "%.1f %.1f %llu %d %d %llu %.4f %u %u\n", (double)t0 * us,
++            (double)t1 * us, (unsigned long long)s_frame_count, s_last_present_path,
++            s_plog_pass, (unsigned long long)s_plog_order, s_plog_p,
++            (unsigned)s_plog_lo, (unsigned)s_plog_n);
++    s_plog_pass = 0;
++}
++
+ /* The swap itself (and its accounting). */
+ static void gl_swap_now(int generated) {
+     (void)generated;
+@@ -9920,7 +10008,9 @@ static void gl_swap_now(int generated) {
+     s_swaps_total++;
+     uint64_t t0 = s_dyn_on ? SDL_GetPerformanceCounter() : 0;
+     const uint64_t rthf_t0 = rth_replaying() ? host_now_ns_rthf() : 0;
++    const uint64_t plog_t0 = SDL_GetPerformanceCounter();
+     gl_present_swap();
++    present_log_swap(plog_t0, SDL_GetPerformanceCounter());
+     if (rthf_t0) {
+         const uint64_t sw = host_now_ns_rthf() - rthf_t0;
+         s_rthf_swap_ns += sw;
+diff --git a/runtime/src/main.cpp b/runtime/src/main.cpp
+index 6ccc23a0..f3810f03 100644
+--- a/runtime/src/main.cpp
++++ b/runtime/src/main.cpp
+@@ -2055,8 +2055,10 @@ extern "C" int psx_mod_set_native_vblank_rate(
+ 
+ extern "C" int psx_mod_set_frame_interpolation(
+     uint32_t frames_per_second) {
++    /* 50 = one in-between frame per 25 fps PAL game frame: the cheapest even
++     * cadence, for scenes where replaying more passes does not fit. */
+     if (frames_per_second != 0 &&
+-        (frames_per_second < 60 || frames_per_second > 1000)) {
++        (frames_per_second < 50 || frames_per_second > 1000)) {
+         std::fprintf(stderr,
+             "psxrecomp: mod rejected invalid interpolated frame rate %u FPS\n",
+             (unsigned)frames_per_second);
+diff --git a/runtime/src/render_pass_projection.cpp b/runtime/src/render_pass_projection.cpp
+index f264f1bb..6e7b2889 100644
+--- a/runtime/src/render_pass_projection.cpp
++++ b/runtime/src/render_pass_projection.cpp
+@@ -4,6 +4,7 @@
+ #include "psx_cycle_freeze.h"
+ #include <algorithm>
+ #include <cmath>
++#include <cstdlib>
+ #include <cstring>
+ #include <new>
+ #include <unordered_map>
+@@ -74,6 +75,11 @@ struct PSXProjectionHistory {
+     double alpha = 1;
+ };
+ static PSXProjectionHistory* active = nullptr;
++// Diagnostic total: replay projections left at their current matrix (no match
++// or a cut). Kept out of PSXProjectionStats, whose header is an execution
++// contract input (changing it changes the save-state identity).
++static uint32_t s_replay_kept = 0;
++extern "C" uint32_t psx_projection_replay_kept_total(void) { return s_replay_kept; }
+ // Intrusive list has no global destructor: title replay objects may release
+ // their histories from static destructors, in either link initialization order.
+ static PSXProjectionHistory* histories = nullptr;
+@@ -157,6 +163,14 @@ extern "C" void psx_projection_replay_begin(PSXProjectionHistory* h, uint32_t al
+     h->capturing = false; h->replaying = true;
+     h->used.assign(h->current.size(), 0);
+     h->alpha = std::min(alpha, 65536u) / 65536.0;
++    // Diagnostic: PSX_RENDER_PASS_ALPHA (0..1) draws every pass at that phase.
++    // At 0 a pass should equal the previous frame wherever motion is blended.
++    static double forced = -2;
++    if (forced == -2) {
++        const char* e = std::getenv("PSX_RENDER_PASS_ALPHA");
++        forced = e && *e ? std::atof(e) : -1;
++    }
++    if (forced >= 0 && forced <= 1) h->alpha = forced;
+     h->stats.replayed = 0; active = h; g_psx_projection_command = psx_projection_command;
+ }
+ extern "C" void psx_projection_replay_end(PSXProjectionHistory* h) {
+@@ -183,16 +197,18 @@ extern "C" int psx_projection_command(CPUState* cpu, uint32_t command) {
+     }
+     if (!h->replaying || !g_psx_render_pass_active) return 0;
+     auto it = h->index.find(p.key);
+-    if (it == h->index.end()) return 0;
++    if (it == h->index.end()) { ++s_replay_kept; return 0; }
+     for (uint32_t i : it->second) {
+         const auto& c = h->current[i];
+         if (h->used[i] || !same_vertices(c,p) || !same_matrix(c.current,p.current)) continue;
+         h->used[i] = 1;
+-        if (!c.blend || same_matrix(c.previous,c.current)) return 0;
++        if (!c.blend) { ++s_replay_kept; return 0; }
++        if (same_matrix(c.previous,c.current)) return 0;
+         PSXMotionMatrix intermediate;
+         psx_motion_blend_matrix(&c.previous, &c.current, h->alpha, 1.2, &intermediate);
+         set_matrix(cpu, intermediate); ++h->stats.replayed;
+         return 1;
+     }
++    ++s_replay_kept;
+     return 0;
+ }
+-- 
+2.43.0
+

@@ -40,10 +40,11 @@ strict = true
 # logic calls during a frame; all are answered without device access inside a
 # pass (outside passes they run untouched). LoadImage (0x7F6A0): uploads a
 # pass's frame makes into the rect it draws are applied after its OT (the HQ
-# mission-select picture is blitted onto the finished frame).
+# mission-select picture is blitted onto the finished frame). SpuSetMute
+# (0x8CD60): read-modify-write of SPUCNT, called while driving on City streets.
 mod_instruction_sites = ["0x0002BFC4"]
 mod_function_entry_funcs = ["0x000234F4", "0x0007ABDC",
-    "0x00093A24", "0x000934DC", "0x0009375C", "0x0007F6A0"]
+    "0x00093A24", "0x000934DC", "0x0009375C", "0x0007F6A0", "0x0008CD60"]
 
 [runtime]
 window_title = "Action Man: Mission Xtreme Recompiled"

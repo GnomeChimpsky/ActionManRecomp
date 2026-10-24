@@ -20,72 +20,29 @@ default_enabled = false
 
 [[option]]
 feature = "interpolated-rendering"
-id = "rate"
+# Not "rate": that id held the 0.4.4 choices (display, 60 ... 240), and a
+# saved value that is no longer a choice would stop the mods resolving.
+id = "fps"
 label = "Presentation rate"
-description = "Follow the display for even cadence, or choose a fixed rate. The game simulation is untouched. Requires OpenGL."
+description = "50 FPS adds one in-between per 25 fps game frame and is the smoothest; 100 FPS adds three and needs a faster GPU. The game simulation is untouched. Requires OpenGL."
 group = "Frame Rate"
 type = "choice"
-default = "display"
+default = "50"
 
 [[option.choice]]
-value = "display"
-label = "Display refresh (Recommended)"
+value = "50"
+label = "50 FPS (Recommended)"
 
 [[option.choice]]
-value = "60"
-label = "60 FPS"
-
-[[option.choice]]
-value = "90"
-label = "90 FPS"
-
-[[option.choice]]
-value = "120"
-label = "120 FPS"
-
-[[option.choice]]
-value = "144"
-label = "144 FPS"
-
-[[option.choice]]
-value = "165"
-label = "165 FPS"
-
-[[option.choice]]
-value = "240"
-label = "240 FPS"
+value = "100"
+label = "100 FPS"
 
 [[plugin]]
 feature = "interpolated-rendering"
-id = "amx.framerate.display"
-when = { rate = "display" }
+id = "amx.framerate.50"
+when = { fps = "50" }
 
 [[plugin]]
 feature = "interpolated-rendering"
-id = "amx.framerate.60"
-when = { rate = "60" }
-
-[[plugin]]
-feature = "interpolated-rendering"
-id = "amx.framerate.90"
-when = { rate = "90" }
-
-[[plugin]]
-feature = "interpolated-rendering"
-id = "amx.framerate.120"
-when = { rate = "120" }
-
-[[plugin]]
-feature = "interpolated-rendering"
-id = "amx.framerate.144"
-when = { rate = "144" }
-
-[[plugin]]
-feature = "interpolated-rendering"
-id = "amx.framerate.165"
-when = { rate = "165" }
-
-[[plugin]]
-feature = "interpolated-rendering"
-id = "amx.framerate.240"
-when = { rate = "240" }
+id = "amx.framerate.100"
+when = { fps = "100" }
