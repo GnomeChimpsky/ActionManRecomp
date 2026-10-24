@@ -80,7 +80,7 @@ The **Mods** page lists the bundled mods. All are off until you enable them:
 
 Defaults (change them under **Settings › Hotkeys**):
 
-- **Tab** – hold to speed up the game (fast-forward).
+- **Tab** – toggle fast-forward to speed up the game; press again for normal speed.
 - **F7** – save states. Savestates are tied to the exact build and do not
   load across versions.
 
