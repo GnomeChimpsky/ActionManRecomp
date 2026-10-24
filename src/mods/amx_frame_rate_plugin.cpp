@@ -186,25 +186,13 @@ void activate(unsigned fps) {
     vblanks = 0;
     PSXDrawReplay::rate(fps, PSX_MOD_RENDER_PASS_FLIP_PENDING);
 }
-void display() { activate(0); }
 void rate50() { activate(50); }
-void rate60() { activate(60); }
-void rate75() { activate(75); }
-void rate90() { activate(90); }
 void rate100() { activate(100); }
-void rate120() { activate(120); }
-void rate144() { activate(144); }
-void rate165() { activate(165); }
-void rate240() { activate(240); }
 }  // namespace
 
 PSX_MOD_CONSTRUCTOR(amx_register_frame_rate_plugins) {
-    const char* ids[] = {"amx.framerate.display", "amx.framerate.50", "amx.framerate.60",
-                         "amx.framerate.75", "amx.framerate.90", "amx.framerate.100",
-                         "amx.framerate.120", "amx.framerate.144", "amx.framerate.165",
-                         "amx.framerate.240"};
-    void (*callbacks[])() = {display, rate50, rate60, rate75, rate90, rate100,
-                             rate120, rate144, rate165, rate240};
+    const char* ids[] = {"amx.framerate.50", "amx.framerate.100"};
+    void (*callbacks[])() = {rate50, rate100};
     for (unsigned i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i) {
         psx_mod_register_activation_plugin(ids[i], callbacks[i]);
         psx_mod_register_vblank_plugin(ids[i], tick);

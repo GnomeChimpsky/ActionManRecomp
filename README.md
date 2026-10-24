@@ -62,8 +62,8 @@ The **Mods** page lists the bundled mods. All are off until you enable them:
 
 - **Action Man Widescreen** – 16:9, 21:9 or *Adaptive* (follows the window
   shape), with the HUD kept at its original proportions.
-- **Action Man Frame Rate** – draws extra in-between frames up to your
-  display rate or a fixed 50 – 240 fps, while game logic, timers and audio
+- **Action Man Frame Rate** – draws extra in-between frames at 50 FPS
+  (default, recommended) or 100 FPS, while game logic, timers and audio
   keep their original pace. Needs OpenGL; see [Frame rate](#frame-rate).
 - **Action Man FMV Skipping** – fast-forwards the full-motion videos.
 - **PGXP Precision** – sub-pixel vertex precision and perspective-correct
@@ -95,7 +95,10 @@ Defaults (change them under **Settings › Hotkeys**):
   mission and the attract-mode levels have been tested. Later missions may
   have bugs; reports are welcome.
 - **In-game options are not saved between sessions.**
-- **Uneven frame pacing in some levels.**
+- **Uneven frame pacing in some levels.** With the Frame Rate mod at 50 FPS
+  City streets are mostly smooth; short judders remain in the heaviest scenes,
+  where the game itself drops below full speed.
+- **Minor HUD glitches due to widescreen rendering.**
 - **The first-person HUD when aiming the bow is missing some graphical
   elements.**
 - **Level code runs on the interpreter on its first visit** until it has been
@@ -119,7 +122,7 @@ Defaults (change them under **Settings › Hotkeys**):
 | Controller | ✅ DualShock analog by default (the game locks analog mode itself) |
 | Internal resolution | ✅ native up to 8K, default 1440p (OpenGL) |
 | Widescreen 16:9 / 21:9 / adaptive | ✅ optional mod; HUD kept at 4:3 proportions |
-| High frame rate | ✅ optional *Action Man Frame Rate* mod, 60 – 240 Hz or display rate |
+| High frame rate | ✅ optional *Action Man Frame Rate* mod, 50 FPS (default) or 100 FPS |
 | PGXP | ✅ built in; enable the bundled PGXP mod |
 | Level code streamed from disc | ✅ interpreted on first visit, compiled to native code on your machine as you play |
 | Complete playthrough | ⚠️ not yet verified |
@@ -147,6 +150,17 @@ Defaults (change them under **Settings › Hotkeys**):
   apart from their outlines and contents; the 3D vehicle icons inside HUD boxes
   now move with their box. (`patches/psxrecomp/0003-…`,
   `[widescreen] auto_ui_provenance` in `game.toml`)
+- **0.4.5 – smoother Frame Rate mod.** On City streets the render passes
+  switched themselves off after a few seconds of driving (a sound call the
+  game makes there faulted inside every pass); it is now skipped during
+  passes. The rate choices are now 50 FPS (the new default) and 100 FPS,
+  which divide the game's 25 fps evenly; see [Frame rate](#frame-rate).
+  The real game frame is now shown between the in-betweens (at 50 FPS only
+  the in-between was shown, twice), and presents are locked to the
+  emulated VBlanks so they no longer slide against the game when it runs
+  slightly behind real time. The release zip now bundles Python and TinyCC
+  for the level-code toolchain, so nothing has to be downloaded.
+  (`src/mods/amx_frame_rate_plugin.cpp`, `patches/psxrecomp/0004-…`)
 
 Savestates are tied to the exact build and do not load across versions.
 
@@ -248,6 +262,7 @@ to the framework are kept as patches and applied by `scripts/apply_patches.sh`:
 | `psxrecomp/0001-cdrom-report-Seek-…` | CD drive reports *Seek* while a read seeks to its target (voice-over fix) |
 | `psxrecomp/0002-widescreen-auto-UI-admit-see-through-…` | widescreen HUD: see-through backing panels are HUD at any OT rank |
 | `psxrecomp/0003-widescreen-auto-UI-classify-HUD-by-vertex-provenance` | widescreen HUD: HUD vs world by vertex provenance (`auto_ui_provenance`) |
+| `psxrecomp/0004-render-passes-show-the-real-frame-and-lock-presents-…` | render passes: show the real frame between in-betweens; lock presents to the guest's VBlanks |
 | `recomp-ui/0001-PSX-launcher-show-Render-thread-…` | launcher: render thread / present thread / Smooth motion settings |
 
 Applying them to the pinned commits reproduces the framework trees the
@@ -303,6 +318,18 @@ the two frames, and submits the result with the game's own calls. Game logic,
 timers and audio keep their original pace. Use it with the OpenGL renderer and
 leave *Smooth motion* off (that generic option causes stutter and texture
 flicker in this game).
+
+*Presentation rate* offers two settings, both whole multiples of the game's
+25 fps:
+
+- **50 FPS** (default, recommended): one in-between per game frame. It is the
+  smoothest and fits the time a pass needs at high internal resolutions.
+- **100 FPS**: three in-betweens per game frame; needs a faster GPU.
+
+Since 0.4.5 the other rates (display refresh, 60, 75, 90, 120, 144, 165 and
+240 FPS) are gone: most do not divide 25 fps evenly and judder, and 75 FPS
+looked worse than 50. A rate chosen in an older version is not carried over; the
+mod starts at 50 FPS.
 
 ## Distribution
 
