@@ -1,0 +1,55 @@
+From 05b7bf06391de3f2396a631b8d1c2a0e6f100e29 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 21:06:00 +0000
+Subject: [PATCH] PSX launcher: show Render thread / Present thread on the deep
+ display card
+
+The rows only existed on the legacy (non-PSX) display card. Smooth motion
+(generic frame generation) is not offered: Action Man's Frame Rate mod
+replaces it, and a value saved by an earlier build is cleared.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+---
+ src/common/backends/imgui/launcher_imgui.cpp | 26 ++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/src/common/backends/imgui/launcher_imgui.cpp b/src/common/backends/imgui/launcher_imgui.cpp
+index 4dc73c7..c2612cd 100644
+--- a/src/common/backends/imgui/launcher_imgui.cpp
++++ b/src/common/backends/imgui/launcher_imgui.cpp
+@@ -4318,6 +4318,32 @@ void draw_display_controls(LauncherModel* m, const LauncherTheme& th) {
+         }
+     }
+ 
++    // Render pipeline (OpenGL): render thread and present thread. The legacy
++    // card above draws these rows; the deep PSX surface did not. Smooth motion
++    // (generic frame generation) is deliberately not offered: the title's
++    // Frame Rate mod replaces it, and it stutters and flickers textures here.
++    // A value saved by an earlier build is cleared so it cannot stay on.
++    if (launcher_model_render_pipeline_offered(m)) {
++        m->s.frame_generation = 0;
++        row_label_right("Render thread", th, cb);
++        bool rt = m->s.render_thread != 0;
++        if (ImGui::Checkbox("##render_thread_deep", &rt))
++            m->s.render_thread = rt ? 1 : 0;
++        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
++            ImGui::SetTooltip("Draws on a separate thread so the game keeps running while a frame renders.\n"
++                              "Turn off if you see stutter or glitches. Applies at next launch.");
++        const bool kids = launcher_model_render_pipeline_children_enabled(m);
++        ImGui::BeginDisabled(!kids);
++        row_label_right("Present thread", th, cb);
++        bool pt = m->s.present_thread != 0;
++        if (ImGui::Checkbox("##present_thread_deep", &pt))
++            m->s.present_thread = pt ? 1 : 0;
++        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled))
++            ImGui::SetTooltip("Shows finished frames from another thread so waiting for the display never stalls drawing.\n"
++                              "Needs Render thread. Applies at next launch.");
++        ImGui::EndDisabled();
++    }
++
+     // Frame interpolation is only meaningful under OpenGL (Software has no
+     // interpolation pass); Presentation target only matters once frame
+     // interpolation is actually on.
+-- 
+2.43.0
+

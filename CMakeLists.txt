@@ -70,9 +70,12 @@ psxrecomp_add_game_runtime(psx-runtime
     GEN_MARKER "generated/SLES_017.61_dispatch.c"
     GEN_FULL_GLOB "generated/SLES_017.61_full_*.c"
     CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c"
+    # Framework builtins Action Man does not ship. Keep this keyword last:
+    # it takes every value after it.
+    EXCLUDE_BUILTIN_MODS psx.presentation.bezel
 )
 
-# Action Man's own mod plugins (widescreen, FMV skipping, frame rate).
+# Action Man's own mod plugins (widescreen, frame rate).
 file(GLOB AMX_MOD_PLUGIN_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/mods/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/mods/*.cpp")

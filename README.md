@@ -48,8 +48,8 @@ The launcher opens before the game. Its **Settings** pages cover:
 - **Video** – renderer (OpenGL is recommended), window size and
   fullscreen, internal resolution (up to 8K, default 1440p), antialiasing,
   texture and FMV filtering, screen model and scanlines, VSync, and the
-  *Render thread*, *Present thread* and *Smooth motion* options. Leave
-  *Smooth motion* off and use the Frame Rate mod instead.
+  *Render thread* and *Present thread* options. For a higher frame rate use
+  the Frame Rate mod.
 - **Audio** – volume and high-quality SPU (sound chip) emulation.
 - **Input** – DualShock analog or digital pad, button bindings and
   analog deadzone.
@@ -65,14 +65,12 @@ The **Mods** page lists the bundled mods. All are off until you enable them:
 - **Action Man Frame Rate** – draws extra in-between frames at 50 FPS
   (default, recommended) or 100 FPS, while game logic, timers and audio
   keep their original pace. Needs OpenGL; see [Frame rate](#frame-rate).
-- **Action Man FMV Skipping** – fast-forwards the full-motion videos.
 - **PGXP Precision** – sub-pixel vertex precision and perspective-correct
   textures to reduce polygon wobble. Needs supersampling of 2× or more.
 - **CD Speed** – shortens loading by speeding up the emulated CD drive.
   Raise it gradually; very high values can stall a load.
 - **HD Texture Packs** – loads DuckStation-compatible replacement textures
   (OpenGL) or dumps the originals. No artwork is included.
-- **Bezel Artwork** – shows an image of your choice in the black side bars.
 - **8 MB Main RAM** and **Fast Loading (host pacing)** – generic options that
   Action Man does not need.
 
@@ -263,7 +261,7 @@ to the framework are kept as patches and applied by `scripts/apply_patches.sh`:
 | `psxrecomp/0002-widescreen-auto-UI-admit-see-through-…` | widescreen HUD: see-through backing panels are HUD at any OT rank |
 | `psxrecomp/0003-widescreen-auto-UI-classify-HUD-by-vertex-provenance` | widescreen HUD: HUD vs world by vertex provenance (`auto_ui_provenance`) |
 | `psxrecomp/0004-render-passes-show-the-real-frame-and-lock-presents-…` | render passes: show the real frame between in-betweens; lock presents to the guest's VBlanks |
-| `recomp-ui/0001-PSX-launcher-show-Render-thread-…` | launcher: render thread / present thread / Smooth motion settings |
+| `recomp-ui/0001-PSX-launcher-show-Render-thread-Present-thread-…` | launcher: render thread / present thread settings (no generic Smooth motion) |
 
 Applying them to the pinned commits reproduces the framework trees the
 released builds were made from exactly. To update the framework, move the
@@ -279,8 +277,7 @@ any patch that no longer applies, then refresh `framework_pins.txt` with
    Keep the raw `.bin`; do not convert it to `.iso`.
 3. OpenBIOS is included; a retail BIOS is optional.
 4. Optional features on the **Mods** page: *Action Man Widescreen*
-   (16:9 / 21:9 / adaptive), *Action Man Frame Rate*, *Action Man FMV
-   Skipping*, *PGXP*, *Fast loading*. **Settings › Display**: internal
+   (16:9 / 21:9 / adaptive), *Action Man Frame Rate*, *PGXP*, *CD Speed*. **Settings › Display**: internal
    resolution, antialiasing, texture filtering, render thread.
 
 ### The level-code toolchain
@@ -315,9 +312,9 @@ Rate** mod uses PSXRecomp's render passes: between two game frames it
 restores the machine to the start of the frame's draw code, replays the
 game's own drawing with every 3D projection placed part of the way between
 the two frames, and submits the result with the game's own calls. Game logic,
-timers and audio keep their original pace. Use it with the OpenGL renderer and
-leave *Smooth motion* off (that generic option causes stutter and texture
-flicker in this game).
+timers and audio keep their original pace. Use it with the OpenGL renderer.
+The framework's generic *Smooth motion* option is not offered, because it
+causes stutter and texture flicker in this game.
 
 *Presentation rate* offers two settings, both whole multiples of the game's
 25 fps:

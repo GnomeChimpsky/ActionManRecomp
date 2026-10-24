@@ -62,10 +62,10 @@ internal_resolution = "1440p"
 antialiasing = true
 texture_filtering = "nearest"
 fmv_filter = "bicubic"
-# OpenGL render thread on by default so Smooth motion (frame generation,
-# Settings > Display) can be ticked directly.
+# OpenGL render thread on by default.
 render_thread = true
-# Generic Smooth motion is superseded by the Frame Rate mod (Mods page).
+# Generic Smooth motion (frame generation) is replaced by the Frame Rate mod
+# (Mods page); the launcher does not offer it.
 frame_generation = false
 
 [controller]

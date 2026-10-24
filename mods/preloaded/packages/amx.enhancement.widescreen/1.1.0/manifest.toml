@@ -1,6 +1,6 @@
 format_version = 5
 id = "amx.enhancement.widescreen"
-version = "1.0.0"
+version = "1.1.0"
 name = "Action Man Widescreen"
 author = "ActionManRecomp"
 description = "Renders Action Man: Mission Xtreme with a wider field of view (16:9, 21:9 or following the window), keeping the HUD at its original proportions."

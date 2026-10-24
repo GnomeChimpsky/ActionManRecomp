@@ -1,6 +1,6 @@
 format_version = 5
 id = "amx.enhancement.frame-rate"
-version = "1.0.0"
+version = "1.1.0"
 name = "Action Man Frame Rate"
 author = "ActionManRecomp"
 description = "Intermediate frames rendered with the game's own drawing code, with 3D positions placed between the game's frames. Game logic, timers and audio keep their stock cadence. Requires OpenGL."
@@ -14,7 +14,7 @@ disc_sha256 = "6ec5784d3a359595083284fafe663f642dc68f801793a331dd478414f22ee341"
 [[feature]]
 id = "interpolated-rendering"
 name = "Interpolated Rendering"
-description = "Redraw the scene between the game's 25 fps frames with interpolated geometry and camera, without speeding up gameplay. Use instead of Settings > Smooth motion."
+description = "Redraw the scene between the game's 25 fps frames with interpolated geometry and camera, without speeding up gameplay."
 group = "Frame Rate"
 default_enabled = false
 
