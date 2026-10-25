@@ -67,8 +67,9 @@ The **Mods** page lists the bundled mods. All are off until you enable them:
   keep their original pace. Needs OpenGL; see [Frame rate](#frame-rate).
 - **Action Man Cheats** – in the *Cheats* group: *Invincibility* (health
   refills instead of running out), *All weapons* (every weapon with full ammo
-  once a mission starts) and *Easy Mode*. They switch on the game's own
-  developer options.
+  once a mission starts), *Easy Mode* and *Unlock all missions* (opens every
+  mission in HQ's mission select; the unlock is kept in your save). They use
+  the game's own developer options and unlock cheat.
 - **PGXP Precision** – sub-pixel vertex precision and perspective-correct
   textures to reduce polygon wobble. Needs supersampling of 2× or more.
 - **CD Speed** – shortens loading by speeding up the emulated CD drive.

@@ -15,6 +15,14 @@
  * limit per id in the table at 0x0009E79C. Each mission sets its own loadout
  * when it starts, so missing weapons are added (with full ammo) once the
  * loadout is in place; weapons the player already carries are left alone.
+ *
+ * Unlock all missions: the HQ front end (overlay 2) has its own unlock cheat,
+ * a six-step button sequence counted in the byte at 0x000D5F7C. Once the
+ * count reaches 6 the mission select (0x000D1544) opens every mission in the
+ * save at 0x000B5B80 and plays a sound. The count is set to 6 while that
+ * overlay is loaded and the first mission word (+0x210) is not yet all ones,
+ * so the game's own routine does the unlocking once. Other overlays use the
+ * same address, so the overlay's code at 0x000D1548 is checked first.
  */
 
 #define AMX_DEBUG_FLAGS      0x000B3270u
@@ -27,6 +35,14 @@
 #define AMX_WEAPON_SLOT_COUNT 32u
 #define AMX_AMMO             (AMX_INVENTORY + 0x41Cu)
 #define AMX_AMMO_LIMITS      0x0009E79Cu
+
+#define AMX_OVERLAY_ID       0x000B2E3Eu
+#define AMX_OVERLAY_HQ       2u
+#define AMX_HQ_CHEAT_CHECK   0x000D1548u /* lbu $v0, 0x5f7c($v1) */
+#define AMX_HQ_CHEAT_OPCODE  0x90625F7Cu
+#define AMX_HQ_CHEAT_COUNT   0x000D5F7Cu
+#define AMX_HQ_CHEAT_STEPS   6u
+#define AMX_MISSIONS         (AMX_INVENTORY + 0x210u)
 
 /* The weapons that have ammo pickups or appear in a mission loadout:
  * handgun, machine gun, rocket launcher, grenade launcher, longbow, sniper
@@ -74,6 +90,15 @@ static void amx_all_weapons_vblank(void) {
     }
 }
 
+static void amx_unlock_missions_vblank(void) {
+    if (!psx_mod_game_started()) return;
+    if (psx_mod_read_half(AMX_OVERLAY_ID) != AMX_OVERLAY_HQ) return;
+    if (psx_mod_read_word(AMX_HQ_CHEAT_CHECK) != AMX_HQ_CHEAT_OPCODE) return;
+    if (psx_mod_read_word(AMX_MISSIONS) == 0xFFFFFFFFu) return;
+    if (psx_mod_read_byte(AMX_HQ_CHEAT_COUNT) < AMX_HQ_CHEAT_STEPS)
+        psx_mod_write_byte(AMX_HQ_CHEAT_COUNT, AMX_HQ_CHEAT_STEPS);
+}
+
 PSX_MOD_CONSTRUCTOR(amx_register_cheats_plugin) {
     (void)psx_mod_register_vblank_plugin(
         "amx.cheats.invincibility", amx_invincibility_vblank);
@@ -81,4 +106,6 @@ PSX_MOD_CONSTRUCTOR(amx_register_cheats_plugin) {
         "amx.cheats.all-weapons", amx_all_weapons_vblank);
     (void)psx_mod_register_vblank_plugin(
         "amx.cheats.easy-mode", amx_easy_mode_vblank);
+    (void)psx_mod_register_vblank_plugin(
+        "amx.cheats.unlock-missions", amx_unlock_missions_vblank);
 }

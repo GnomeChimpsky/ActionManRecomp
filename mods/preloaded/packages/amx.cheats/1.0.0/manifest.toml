@@ -32,6 +32,13 @@ description = "The developer menu's Easy Mode."
 group = "Cheats"
 default_enabled = false
 
+[[feature]]
+id = "unlock-missions"
+name = "Unlock all missions"
+description = "Opens every mission in HQ's mission select, using the game's own unlock cheat. The unlock is kept in your save."
+group = "Cheats"
+default_enabled = false
+
 [[plugin]]
 feature = "invincibility"
 id = "amx.cheats.invincibility"
@@ -43,3 +50,7 @@ id = "amx.cheats.all-weapons"
 [[plugin]]
 feature = "easy-mode"
 id = "amx.cheats.easy-mode"
+
+[[plugin]]
+feature = "unlock-missions"
+id = "amx.cheats.unlock-missions"
