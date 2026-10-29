@@ -16,13 +16,14 @@
  * when it starts, so missing weapons are added (with full ammo) once the
  * loadout is in place; weapons the player already carries are left alone.
  *
- * Unlock all missions: the HQ front end (overlay 2) has its own unlock cheat,
- * a six-step button sequence counted in the byte at 0x000D5F7C. Once the
- * count reaches 6 the mission select (0x000D1544) opens every mission in the
- * save at 0x000B5B80 and plays a sound. The count is set to 6 while that
- * overlay is loaded and the first mission word (+0x210) is not yet all ones,
- * so the game's own routine does the unlocking once. Other overlays use the
- * same address, so the overlay's code at 0x000D1548 is checked first.
+ * Unlock all missions: the HQ front end (overlay 2) has its own unlock cheat
+ * (0x000D155C), but it is only checked on one of the HQ screens, not on the
+ * mission select. It opens every mission by setting the save's mission words
+ * at 0x000B5B80+0x210..+0x23C to all ones (except bit 4 of +0x228), the words
+ * +0x240..+0x26C to -1 (except +0x258) and the bytes +0x330..+0x332 to 1.
+ * The mission select reads those words live, so the same values are written
+ * here while HQ is loaded and the first word is not yet all ones. HQ's code
+ * at 0x000D1548 is checked too, since other overlays share its addresses.
  */
 
 #define AMX_DEBUG_FLAGS      0x000B3270u
@@ -40,9 +41,12 @@
 #define AMX_OVERLAY_HQ       2u
 #define AMX_HQ_CHEAT_CHECK   0x000D1548u /* lbu $v0, 0x5f7c($v1) */
 #define AMX_HQ_CHEAT_OPCODE  0x90625F7Cu
-#define AMX_HQ_CHEAT_COUNT   0x000D5F7Cu
-#define AMX_HQ_CHEAT_STEPS   6u
 #define AMX_MISSIONS         (AMX_INVENTORY + 0x210u)
+#define AMX_MISSION_WORDS    12u
+#define AMX_MISSION_HIDDEN   (AMX_INVENTORY + 0x228u) /* bit 4 stays clear */
+#define AMX_MISSION_STATE    (AMX_INVENTORY + 0x240u)
+#define AMX_MISSION_STATE_SKIP 6u
+#define AMX_MISSION_FLAGS    (AMX_INVENTORY + 0x330u)
 
 /* The weapons that have ammo pickups or appear in a mission loadout:
  * handgun, machine gun, rocket launcher, grenade launcher, longbow, sniper
@@ -91,12 +95,18 @@ static void amx_all_weapons_vblank(void) {
 }
 
 static void amx_unlock_missions_vblank(void) {
+    uint32_t i;
     if (!psx_mod_game_started()) return;
     if (psx_mod_read_half(AMX_OVERLAY_ID) != AMX_OVERLAY_HQ) return;
     if (psx_mod_read_word(AMX_HQ_CHEAT_CHECK) != AMX_HQ_CHEAT_OPCODE) return;
     if (psx_mod_read_word(AMX_MISSIONS) == 0xFFFFFFFFu) return;
-    if (psx_mod_read_byte(AMX_HQ_CHEAT_COUNT) < AMX_HQ_CHEAT_STEPS)
-        psx_mod_write_byte(AMX_HQ_CHEAT_COUNT, AMX_HQ_CHEAT_STEPS);
+    for (i = 0; i < AMX_MISSION_WORDS; ++i)
+        psx_mod_write_word(AMX_MISSIONS + 4u * i, 0xFFFFFFFFu);
+    psx_mod_write_word(AMX_MISSION_HIDDEN, 0xFFFFFFEFu);
+    for (i = 0; i < AMX_MISSION_WORDS; ++i)
+        if (i != AMX_MISSION_STATE_SKIP)
+            psx_mod_write_word(AMX_MISSION_STATE + 4u * i, 0xFFFFFFFFu);
+    for (i = 0; i < 3u; ++i) psx_mod_write_byte(AMX_MISSION_FLAGS + i, 1u);
 }
 
 PSX_MOD_CONSTRUCTOR(amx_register_cheats_plugin) {

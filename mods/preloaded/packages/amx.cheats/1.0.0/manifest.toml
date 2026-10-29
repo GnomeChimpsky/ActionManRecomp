@@ -35,7 +35,7 @@ default_enabled = false
 [[feature]]
 id = "unlock-missions"
 name = "Unlock all missions"
-description = "Opens every mission in HQ's mission select, using the game's own unlock cheat. The unlock is kept in your save."
+description = "Opens every mission in HQ's mission select, the same way the game's own unlock cheat does. The unlock is kept in your save."
 group = "Cheats"
 default_enabled = false
 
