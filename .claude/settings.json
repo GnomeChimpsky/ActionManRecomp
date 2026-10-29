@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash scripts/build.sh:*)",
+      "Bash(bash scripts/apply_patches.sh:*)",
+      "Bash(bash scripts/package_release.sh:*)",
+      "Bash(cmake:*)",
+      "Bash(ninja:*)",
+      "Bash(./build-linux/ActionManRecomp:*)",
+      "Bash(xvfb-run:*)"
+    ]
+  }
+}
