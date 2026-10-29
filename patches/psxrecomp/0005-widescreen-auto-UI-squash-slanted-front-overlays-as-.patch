@@ -1,0 +1,350 @@
+From 49d401b344a25e1064d8310643f753dd901cf067 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 29 Oct 2026 20:46:04 +0000
+Subject: [PATCH] widescreen auto-UI: squash slanted front overlays as HUD,
+ keep edge vertices
+
+Under auto_ui_provenance a screen-space triangle or slanted quad drawn in
+front of every world primitive is now a HUD candidate in its own right,
+not only a part lying inside an admitted widget. A vertex on or beyond a
+display edge keeps its X, so an overlay covering the 4:3 screen out to its
+edges still reaches the edges of the wide image after the inner part is
+squashed.
+
+Fixes Action Man: Mission Xtreme's bow scope at 16:9: the mask is a radial
+mesh of slanted quads with a few axis-aligned ones among them, and only
+those were squashed, which tore holes in the mask, left the zoom meter
+squashed inside a stretched panel and split the first-person bow's wings.
+New test: ws_auto_ui_overlay_mesh_exec_test.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ runtime/CMakeLists.txt                        |  19 +++
+ runtime/src/gpu.c                             |  53 +++++-
+ .../tests/test_ws_auto_ui_overlay_mesh_exec.c | 158 ++++++++++++++++++
+ 3 files changed, 221 insertions(+), 9 deletions(-)
+ create mode 100644 runtime/tests/test_ws_auto_ui_overlay_mesh_exec.c
+
+diff --git a/runtime/CMakeLists.txt b/runtime/CMakeLists.txt
+index 74d7fb2..e61a174 100644
+--- a/runtime/CMakeLists.txt
++++ b/runtime/CMakeLists.txt
+@@ -1009,6 +1009,25 @@ if(BUILD_TESTING)
+     add_test(NAME ws_auto_ui_provenance_exec_test
+              COMMAND ws_auto_ui_provenance_exec_test)
+ 
++    # auto_ui_provenance: a slanted 2D overlay mesh in front of the world
++    # squashes as one piece and keeps its display-edge vertices.
++    add_executable(ws_auto_ui_overlay_mesh_exec_test
++        tests/test_ws_auto_ui_overlay_mesh_exec.c
++        src/ws_ui_group.c
++        src/psx_video_timing.c
++        src/gpu_timeline.c)
++    target_include_directories(ws_auto_ui_overlay_mesh_exec_test PRIVATE
++        include
++        src)
++    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
++        target_compile_options(ws_auto_ui_overlay_mesh_exec_test PRIVATE
++            -ffunction-sections -fdata-sections)
++        target_link_options(ws_auto_ui_overlay_mesh_exec_test PRIVATE
++            -Wl,--gc-sections)
++    endif()
++    add_test(NAME ws_auto_ui_overlay_mesh_exec_test
++             COMMAND ws_auto_ui_overlay_mesh_exec_test)
++
+     add_executable(ws_shared_split_ui_exec_test
+         tests/test_ws_shared_split_ui_exec.c
+         src/ws_ui_group.c
+diff --git a/runtime/src/gpu.c b/runtime/src/gpu.c
+index bbaf234..9a0d3da 100644
+--- a/runtime/src/gpu.c
++++ b/runtime/src/gpu.c
+@@ -216,6 +216,7 @@ static struct {
+     uint32_t behind;      /* auto_ui_provenance: 2D drawn behind the world  */
+     uint32_t picture;     /* auto_ui_provenance: runs framing an upload     */
+     uint32_t follow;      /* NOT a reject: projected icons inside HUD boxes */
++    uint32_t overlay;     /* NOT a reject: slanted 2D in front of the world */
+ } ws_ui_reject;
+ 
+ /* Geometry of the primitives the max_rank filter discarded. A count alone
+@@ -2290,7 +2291,7 @@ int psx_ws_ui_groups_json(char *buf, int cap) {
+         "\"stale_why\":[%u,%u,%u,%u,%u],\"stale_addr\":\"0x%08X\","
+         "\"backing_panels\":%u,\"enclosed_parts\":%u,\"n\":%u,"
+         "\"provenance\":%d,\"world\":%u,\"behind\":%u,\"follow\":%u,"
+-        "\"picture\":%u,",
++        "\"picture\":%u,\"overlay\":%u,",
+         ws_active(), ws_auto_ui_squash, ws_auto_ui_dense,
+         ws_ui_prepass_rank != 0xFFFFu ? (int)ws_ui_prepass_rank : -1,
+         ws_disp_x(), ws_disp_w(), WS_UI_GROUP_JOIN_GAP,
+@@ -2300,7 +2301,8 @@ int psx_ws_ui_groups_json(char *buf, int cap) {
+         ws_ui_stale_why[3], ws_ui_stale_why[4], ws_ui_stale_why[5],
+         ws_ui_stale_addr, ws_ui_reject.backing, ws_ui_reject.enclosed,
+         ws_ui_prepass_count, ws_ui_provenance(), ws_ui_reject.world,
+-        ws_ui_reject.behind, ws_ui_reject.follow, ws_ui_reject.picture);
++        ws_ui_reject.behind, ws_ui_reject.follow, ws_ui_reject.picture,
++        ws_ui_reject.overlay);
+     off += snprintf(buf + off, (size_t)(cap - off), "\"rank_dropped\":[");
+     for (uint32_t i = 0; i < ws_ui_rankdrop_count && off < cap - 120; i++) {
+         off += snprintf(buf + off, (size_t)(cap - off),
+@@ -3115,6 +3117,19 @@ static int32_t ws_ui_y(int32_t y, int32_t ay, double s) {
+     return ay + (int32_t)lround((double)(y - ay) * s);
+ }
+ 
++/* auto_ui_provenance: a vertex on or beyond a display edge stays there, so an
++ * overlay that covers the 4:3 screen out to its edges (the bow scope's mask
++ * and side panels) still reaches the edges of the wide image after its inner
++ * part is squashed. Everything between keeps the widget's squash. */
++static int32_t ws_shared_ui_delta(void);
++static int32_t ws_ui_item_x(const WsUiPrepassItem *it, int32_t x, double s) {
++    if (ws_ui_provenance()) {
++        const int32_t sx = x + it->ox, X = ws_disp_x(), W = ws_disp_w();
++        if (sx <= X || sx >= X + W) return x;
++    }
++    return ws_ui_x(x, it->group.anchor, s) + ws_shared_ui_delta();
++}
++
+ static int ws_shared_ui_packet(void) {
+     uint32_t op = gp0_cmd_buf[0] >> 24;
+     if (!((op >= 0x28u && op <= 0x3Fu && (op & 8u)) ||
+@@ -3190,7 +3205,7 @@ static int ws_auto_ui_transform_part(int32_t *vx, int32_t *vy, int n) {
+     }
+     const double s = ws_auto_ui_size();
+     for (int i = 0; i < n; i++) {
+-        vx[i] = ws_ui_x(vx[i], it->group.anchor, s) + ws_shared_ui_delta();
++        vx[i] = ws_ui_item_x(it, vx[i], s);
+         vy[i] = ws_ui_y(vy[i], it->anchor_y, s);
+     }
+     ws_auto_ui_transform_count++;
+@@ -3227,7 +3242,7 @@ static int ws_auto_ui_transform_quad(int32_t vx[4], int32_t vy[4]) {
+     }
+     const double s = ws_auto_ui_size();
+     for (int i = 0; i < 4; i++) {
+-        vx[i] = ws_ui_x(vx[i], it->group.anchor, s) + ws_shared_ui_delta();
++        vx[i] = ws_ui_item_x(it, vx[i], s);
+         vy[i] = ws_ui_y(vy[i], it->anchor_y, s);
+     }
+     ws_auto_ui_transform_count++;
+@@ -3257,16 +3272,16 @@ static int ws_auto_ui_transform_rect(int32_t *x, int32_t *y, int *w, int *h) {
+         return 1;
+     }
+     const double s = ws_auto_ui_size();
+-    if (s >= 1.0) {
++    if (s >= 1.0 && !ws_ui_provenance()) {
+         *x = ws_scale_about(*x, it->group.anchor) + ws_shared_ui_delta();
+         *w = (int)ws_scale_len(*w);
+     } else {
+         /* Scale both edges so neighbouring parts of a widget stay butted. */
+-        const int32_t x0 = ws_ui_x(*x, it->group.anchor, s);
+-        const int32_t x1 = ws_ui_x(*x + *w, it->group.anchor, s);
++        const int32_t x0 = ws_ui_item_x(it, *x, s);
++        const int32_t x1 = ws_ui_item_x(it, *x + *w, s);
+         const int32_t y0 = ws_ui_y(*y, it->anchor_y, s);
+         const int32_t y1 = ws_ui_y(*y + *h, it->anchor_y, s);
+-        *x = x0 + ws_shared_ui_delta();
++        *x = x0;
+         *w = x1 - x0 < 1 ? 1 : (int)(x1 - x0);
+         *y = y0;
+         *h = y1 - y0 < 1 ? 1 : (int)(y1 - y0);
+@@ -6850,7 +6865,7 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+         ws_ui_reject.too_big = ws_ui_reject.cap = ws_ui_reject.rank =
+         ws_ui_reject.stale = ws_ui_reject.backing = ws_ui_reject.enclosed = 0;
+     ws_ui_reject.world = ws_ui_reject.behind = ws_ui_reject.follow = 0;
+-    ws_ui_reject.picture = 0;
++    ws_ui_reject.picture = ws_ui_reject.overlay = 0;
+     ws_ui_rankdrop_count = 0;
+     ws_ui_follower_count = 0;
+     if (ws_ui_world_total) {
+@@ -7003,6 +7018,26 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+     for (uint32_t i = 0; i < ws_ui_prepass_count; i++)
+         keep[i] = (provenance || ws_ui_prepass[i].ot_rank == max_rank) &&
+                   !ws_ui_prepass[i].enclosed_only;
++    /* auto_ui_provenance: a screen-space triangle or slanted quad drawn in
++     * front of every world primitive is an overlay piece in its own right,
++     * not only a part inside some other widget. Action Man's bow scope is a
++     * radial mesh of slanted black and green quads with a few axis-aligned
++     * ones among them, and the first-person bow is screen-space quads of both
++     * kinds: squashing only the axis-aligned pieces tore holes in the mask
++     * and split the bow's wings. */
++    if (provenance && ws_ui_world_total) {
++        uint32_t world_max = 0;
++        for (uint32_t r = 0; r < WS_UI_WORLD_RANKS; r++)
++            if (ws_ui_world_rank_count[r]) world_max = r;
++        for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
++            if (ws_ui_prepass[i].enclosed_only &&
++                ws_ui_prepass[i].ot_rank > world_max) {
++                ws_ui_prepass[i].enclosed_only = 0;
++                keep[i] = 1;
++                ws_ui_reject.overlay++;
++            }
++        }
++    }
+     uint32_t p10 = 0, p90 = 0;
+     if (provenance && ws_ui_world_total) {
+         /* 2D that belongs to the 3D scene. A HUD is drawn in front of the
+diff --git a/runtime/tests/test_ws_auto_ui_overlay_mesh_exec.c b/runtime/tests/test_ws_auto_ui_overlay_mesh_exec.c
+new file mode 100644
+index 0000000..62fbb94
+--- /dev/null
++++ b/runtime/tests/test_ws_auto_ui_overlay_mesh_exec.c
+@@ -0,0 +1,158 @@
++#ifdef NDEBUG
++#undef NDEBUG
++#endif
++
++/* [widescreen] auto_ui_provenance: a screen-space overlay mesh drawn in front
++ * of the whole world squashes as one piece (Action Man: Mission Xtreme's bow
++ * scope).
++ *
++ *  - The scope mask is a radial mesh of slanted quads with a few axis-aligned
++ *    ones among them. Only the axis-aligned pieces used to squash; the slanted
++ *    ones stayed stretched, tearing holes in the mask and splitting the bow.
++ *    A slanted 2D quad in front of every world primitive is now a HUD
++ *    candidate in its own right and squashes with its run.
++ *  - A vertex on a display edge stays on it, so the mask still covers the
++ *    wide image out to its edges.
++ *  - A slanted 2D quad among the world's ranks keeps the old rule (a widget
++ *    part only when it lies inside an admitted widget).
++ *
++ * Drives the real path: an ordering-table linked list in guest RAM, the UI
++ * prepass, run grouping (real ws_ui_group.c), then GP0 execution. */
++
++#include <assert.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <string.h>
++
++#define GPU_EXEC_REAL_UI_GROUP
++#include "../src/gpu.c"
++
++#include "gpu_exec_stubs.inc"
++
++#define OT_HEAD     0x00010000u
++#define NODE_WORLD  0x00010100u   /* projected quad, rank 0                  */
++#define NODE_LOW    0x00010180u   /* slanted 2D quad among the world, rank 0 */
++#define NODE_GAP0   0x00010200u   /* empty: next rank                        */
++#define NODE_SLANT  0x00010300u   /* slanted mask piece, rank 1              */
++#define NODE_STRAIT 0x00010380u   /* axis-aligned mask piece, rank 1         */
++
++static uint32_t pack_vertex(int16_t x, int16_t y) {
++    return (uint16_t)x | ((uint32_t)(uint16_t)y << 16);
++}
++
++static void put_node(uint32_t addr, uint32_t next, const uint32_t *words,
++                     uint32_t count) {
++    test_ram[addr / 4u] = (count << 24) | (next & 0xFFFFFFu);
++    for (uint32_t i = 0; i < count; i++)
++        test_ram[addr / 4u + 1u + i] = words[i];
++}
++
++static void put_poly(uint32_t node, uint32_t next, const int16_t v[4][2]) {
++    const uint32_t q[5] = {
++        0x28000000u,
++        pack_vertex(v[0][0], v[0][1]), pack_vertex(v[1][0], v[1][1]),
++        pack_vertex(v[2][0], v[2][1]), pack_vertex(v[3][0], v[3][1]),
++    };
++    put_node(node, next, q, 5);
++}
++
++static int projected_word(uint32_t addr, uint32_t word) {
++    (void)word;
++    return addr >= NODE_WORLD && addr < NODE_WORLD + 0x20u;
++}
++
++/* A left-hand mask band from the display's left edge to the scope ring
++ * around the centre of a 320-wide display: a slanted piece over the top half
++ * and an axis-aligned piece under it, butted at x 120. */
++static void build(void) {
++    memset(test_ram, 0, sizeof(test_ram));
++    test_ram[OT_HEAD / 4u] = NODE_WORLD;                       /* rank 0 */
++    const int16_t world[4][2] = {{140, 100}, {180, 100}, {140, 140}, {180, 140}};
++    put_poly(NODE_WORLD, NODE_LOW, world);
++    const int16_t low[4][2] = {{200, 20}, {240, 30}, {205, 60}, {250, 70}};
++    put_poly(NODE_LOW, NODE_GAP0, low);
++    test_ram[NODE_GAP0 / 4u] = NODE_SLANT;                     /* rank 1 */
++    const int16_t slant[4][2] = {{0, 0}, {150, 0}, {0, 120}, {120, 120}};
++    put_poly(NODE_SLANT, NODE_STRAIT, slant);
++    const int16_t strait[4][2] = {{0, 120}, {120, 120}, {0, 240}, {120, 240}};
++    put_poly(NODE_STRAIT, 0xFFFFFFu, strait);
++}
++
++static void load_packet(uint32_t node) {
++    for (uint32_t i = 0; i < 5; i++)
++        gp0_cmd_buf[i] = test_ram[node / 4u + 1u + i];
++    gp0_cmd_source_addr = node + 4u;
++    gp0_words_needed = 5;
++}
++
++static void reset_state(void) {
++    s_frame_count = 100;
++    draw_offset_x = draw_offset_y = 0;
++    draw_area_left = 0; draw_area_top = 0;
++    draw_area_right = 1023; draw_area_bottom = 511;
++    hres1 = 1; hres2 = 0; video_mode = 0; display_depth = 0;
++    display_disabled = 0; display_area_x = 0; display_area_y = 0;
++    h_display_x1 = 0x200; h_display_x2 = 0xC00;
++    v_display_y1 = 0x010; v_display_y2 = 0x100;
++    /* Projection-and-stretch path at 16:9: X squash 3/4, not native-wide. */
++    ws_mode = 0;
++    ws_cfg_num = 16; ws_cfg_den = 9;
++    ws_xnum = 3; ws_xden = 4;
++    ws_full_2d = 0;
++    fixture_word_projected = projected_word;
++    gpu_ws_set_auto_ui_squash(1);
++    gpu_ws_set_auto_ui_in_place(0);
++    gpu_ws_set_auto_ui_proportional(0);
++    gpu_ws_set_auto_ui_provenance(1);
++    pgxp_set_enabled(1);
++}
++
++static void run_quad(uint32_t node) {
++    gpu_exec_reset_triangles();
++    load_packet(node);
++    gp0_exec_mono_quad();
++    assert(gpu_exec_triangles.calls >= 1);
++}
++
++int main(void) {
++    reset_state();
++    build();
++    gpu_ws_prepass_linked_list(OT_HEAD);
++    assert(ws_ui_provenance());
++    assert(ws_ui_reject.world == 1);
++    assert(ws_ui_reject.overlay == 1);          /* the slanted mask piece */
++
++    /* Both mask pieces are one run with one anchor. */
++    int slant = -1, strait = -1, low = -1;
++    for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
++        if (ws_ui_prepass[i].src_addr == NODE_SLANT + 4u) slant = (int)i;
++        if (ws_ui_prepass[i].src_addr == NODE_STRAIT + 4u) strait = (int)i;
++        if (ws_ui_prepass[i].src_addr == NODE_LOW + 4u) low = (int)i;
++    }
++    assert(slant >= 0 && strait >= 0);
++    assert(low < 0);                            /* among the world: not HUD */
++    assert(ws_ui_prepass[slant].group.root == ws_ui_prepass[strait].group.root);
++    const int32_t anchor = ws_ui_prepass[strait].group.anchor;
++    assert(ws_ui_prepass[slant].group.anchor == anchor);
++
++    /* The left edge stays on the display edge; the inner edge squashes about
++     * the run's anchor, identically for the slanted and the straight piece,
++     * so the two stay butted. */
++    const int32_t left = ws_disp_x();
++    run_quad(NODE_STRAIT);
++    assert(gpu_exec_triangles.min_x == left);
++    const int inner = gpu_exec_triangles.max_x;
++    assert(inner == ws_scale_about(120, anchor));
++    assert(inner != 120);
++    run_quad(NODE_SLANT);
++    assert(gpu_exec_triangles.min_x == left);
++    assert(gpu_exec_triangles.max_x == ws_scale_about(150, anchor));
++
++    /* The slanted quad among the world is drawn as the game sent it. */
++    run_quad(NODE_LOW);
++    assert(gpu_exec_triangles.min_x == 200);
++    assert(gpu_exec_triangles.max_x == 250);
++
++    printf("ws_auto_ui_overlay_mesh_exec_test: PASS\n");
++    return 0;
++}
+-- 
+2.43.0
+
