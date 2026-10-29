@@ -152,6 +152,12 @@ Defaults (change them under **Settings › Hotkeys**):
   Easy Mode and Unlock all missions, toggled in the launcher's Cheats group.
   (`src/mods/amx_frame_rate_plugin.cpp`, `src/mods/amx_cheats_plugin.c`,
   `patches/psxrecomp/0004-…`)
+- **0.5.0 – bow scope in widescreen.** The scope view's mask, side panels and
+  first-person bow are flat 2D drawn over the world; only their axis-aligned
+  pieces were proportion-corrected, so the mask tore open, the zoom meter
+  left its panel and the bow's wings came apart. Slanted 2D drawn in front of
+  the whole world is now corrected with them, and pieces on the screen edge
+  still reach the edges of the wide image. (`patches/psxrecomp/0005-…`)
 
 Savestates are tied to the exact build and do not load across versions.
 

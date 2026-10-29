@@ -1,5 +1,25 @@
 # Release notes
 
+## 0.5.0
+
+**Downloads**:
+
+- `Action-Man-Recomp-0.5.0-windows-x64.zip`
+- `Action-Man-Recomp-0.5.0-linux-x64.zip`
+
+**Changes since 0.4.6**
+
+- Widescreen: the bow's scope view stays in one piece. The scope mask no
+  longer has holes, the scope is round, the zoom meter sits in its panel and
+  the first-person bow's wings stay attached.
+
+**Known issues**
+
+- Vertex wobble as on original hardware
+- Minor HUD glitches due to widescreen rendering
+- Short judders remain in the heaviest scenes
+- Savestates are tied to the build and may not load across versions
+
 ## 0.4.6
 
 **Downloads**:
