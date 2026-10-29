@@ -146,11 +146,13 @@ Defaults (change them under **Settings › Hotkeys**):
   emulated VBlanks so they no longer slide against the game when it runs
   slightly behind real time. The release zip now bundles Python and TinyCC
   for the level-code toolchain, so nothing has to be downloaded.
-- **0.4.6 – launcher clean-up.** The generic *Smooth motion* option is no
+- **0.4.6 – launcher clean-up and cheats.** The generic *Smooth motion* option is no
   longer offered (the Frame Rate mod replaces it), and the *FMV Skipping* and
   *Bezel Artwork* mods are removed. The Widescreen and Frame Rate mods are now
-  version 1.1.0.
-  (`src/mods/amx_frame_rate_plugin.cpp`, `patches/psxrecomp/0004-…`)
+  version 1.1.0. New *Action Man Cheats* mod: Invincibility, All weapons,
+  Easy Mode and Unlock all missions, toggled in the launcher's Cheats group.
+  (`src/mods/amx_frame_rate_plugin.cpp`, `src/mods/amx_cheats_plugin.c`,
+  `patches/psxrecomp/0004-…`)
 
 Savestates are tied to the exact build and do not load across versions.
 

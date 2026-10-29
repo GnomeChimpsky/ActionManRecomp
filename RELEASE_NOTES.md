@@ -5,6 +5,7 @@
 **Downloads**:
 
 - `Action-Man-Recomp-0.4.6-windows-x64.zip`
+- `Action-Man-Recomp-0.4.6-linux-x64.zip`
 
 **Changes since 0.4.5**
 
