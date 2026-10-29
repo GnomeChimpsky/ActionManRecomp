@@ -1,4 +1,8 @@
-# Action Man Recomp
+<p align="center">
+  <img src="assets/actionman.png"
+       alt="Action Man"
+       width="100%">
+</p>
 
 A static recompilation of **Action Man: Mission Xtreme** (PlayStation, PAL,
 `SLES-01761`) into a native PC program, built on
