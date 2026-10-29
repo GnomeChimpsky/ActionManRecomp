@@ -21,7 +21,6 @@
 **Known issues**
 
 - Vertex wobble as on original hardware
-- In-game options are not saved between sessions
 - Minor HUD glitches due to widescreen rendering
 - Short judders remain in the heaviest scenes
 - Savestates are tied to the build and may not load across versions
@@ -49,7 +48,6 @@
 **Known issues**
 
 - Vertex wobble as on original hardware
-- In-game options are not saved between sessions
 - Minor HUD glitches due to widescreen rendering
 - Short judders remain in the heaviest scenes
 - Savestates are tied to the build and may not load across versions
