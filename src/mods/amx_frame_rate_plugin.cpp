@@ -3,19 +3,19 @@
 #include <vector>
 
 /*
- * Action Man: Mission Xtreme -- interpolated rendering with the game's own
+ * Action Man: Operation Extreme (SLUS-00887) -- interpolated rendering with the game's own
  * draw code (docs/RENDER_PASSES.md, same method as Ape Escape's plugin).
  *
- * In-game main loop (0x0002BE48), once per game frame:
- *   2BFBC  jal 2332C        frame begin: VSync, ClearOTag of the next OT
- *   2BFC4  jal 2611C        \  logic + scene / HUD build into the OT
- *   2BFCC  jal 2DC40        /  (the replayed draw section)
- *   2BFDC  jal 234F4        flip: DrawSync(0), VSync(n), PutDispEnv(disp[i]),
- *                           PutDrawEnv(draw[i]), 23438 = finalize + DrawOTag
+ * In-game main loop (0x0002BE08), once per game frame:
+ *   2BF7C  jal 23328        frame begin: VSync, ClearOTag of the next OT
+ *   2BF84  jal 260E4        \  logic + scene / HUD build into the OT
+ *   2BF8C  jal 2DC00        /  (the replayed draw section)
+ *   2BF9C  jal 234F0        flip: DrawSync(0), VSync(n), PutDispEnv(disp[i]),
+ *                           PutDrawEnv(draw[i]), 23434 = finalize + DrawOTag
  *
- * DISPENV[i] (0x000A93C0, stride 0x14) shows the area DRAWENV[1-i]
- * (0x000A9304, stride 0x5C) draws; i is the halfword at 0x0009D64C. So at the
- * entry of 234F4 the previous frame is drawn and waits (PENDING flip) in the
+ * DISPENV[i] (0x000A6628, stride 0x14) shows the area DRAWENV[1-i]
+ * (0x000A656C, stride 0x5C) draws; i is the halfword at 0x0009AB84. So at the
+ * entry of 234F0 the previous frame is drawn and waits (PENDING flip) in the
  * rect disp[i] will show. Each pass restores RAM to the section entry, replays
  * the section with GTE projections placed between the last two frames, and
  * submits the result into that waiting rect with the game's own calls.
@@ -23,39 +23,39 @@
 extern "C" uint32_t psx_projection_replay_kept_total(void);
 
 namespace {
-constexpr uint32_t Start = 0x0002BFC4, StartWord = 0x0C009847;  // jal 0x0002611C
-constexpr uint32_t Stop = 0x0002BFD4;                            // after jal 0x0002DC40
-constexpr uint32_t Submit = 0x000234F4, SubmitReturn = 0x0002BFE4;
-constexpr uint32_t BufferIndex = 0x0009D64C;
-constexpr uint32_t DispEnv = 0x000A93C0, DispStride = 0x14;
-constexpr uint32_t DrawEnv = 0x000A9304, DrawStride = 0x5C;
-constexpr uint32_t PutDrawEnv = 0x0007FA58, DrawSync = 0x0007F3F4;
-constexpr uint32_t FlushOT = 0x00023438;  // finalize OT + DrawOTag
+constexpr uint32_t Start = 0x0002BF84, StartWord = 0x0C009839;  // jal 0x000260E4
+constexpr uint32_t Stop = 0x0002BF94;                            // after jal 0x0002DC00
+constexpr uint32_t Submit = 0x000234F0, SubmitReturn = 0x0002BFA4;
+constexpr uint32_t BufferIndex = 0x0009AB84;
+constexpr uint32_t DispEnv = 0x000A6628, DispStride = 0x14;
+constexpr uint32_t DrawEnv = 0x000A656C, DrawStride = 0x5C;
+constexpr uint32_t PutDrawEnv = 0x0007F8A0, DrawSync = 0x0007F23C;
+constexpr uint32_t FlushOT = 0x00023434;  // finalize OT + DrawOTag
 // Sound-effect start: scans voices with SpuGetKeyStatus (reads SPU ADSR
 // volume registers, which a pass may not read). Inside a pass report "no free
 // voice" (-1), the game's own result when every voice is busy; SPU writes are
 // dropped by the sandbox anyway and RAM is restored after the pass.
-constexpr uint32_t PlaySound = 0x0007ABDC;
+constexpr uint32_t PlaySound = 0x0007AA24;
 // libspu SpuSetMute(on_off): read-modify-write of SPUCNT (0x1F801DAA), which a
-// pass may not read. The game logic calls it through 0x0007B888/0x0007B8A8
+// pass may not read. The game logic calls it through 0x0007B6D0/0x0007B6F0
 // while driving on City streets; inside a pass return its result (on_off)
 // untouched. Without this every pass there faulted and passes switched
 // themselves off for the session after eight.
-constexpr uint32_t SpuSetMute = 0x0008CD60;
+constexpr uint32_t SpuSetMute = 0x0008A658;
 // libcd primitives behind CdControl/CdControlB/CdControlF/CdSync/CdReady
 // (XA music control from the game logic). Inside a pass the CD registers are
 // off limits and its interrupts never arrive, so answer as an idle drive:
 // command accepted (0), sync complete (CdlComplete = 2), nothing ready (0).
-constexpr uint32_t CdCommand = 0x00093A24, CdSyncWait = 0x000934DC, CdReadyPoll = 0x0009375C;
+constexpr uint32_t CdCommand = 0x0009152C, CdSyncWait = 0x00090FE4, CdReadyPoll = 0x00091264;
 // libgpu LoadImage(RECT*, u_long*). The HQ mission-select picture (APART
-// overlay 0x000CB488, and its row-by-row wipe at 0x000CB45C) is uploaded
+// overlay 0x000CB468, and its row-by-row wipe at 0x000CB43C) is uploaded
 // straight into the frame buffer the previous flip finished -- the rect a pass
 // draws into -- so on the console it lands on top of that finished frame. A
 // replayed section uploads it BEFORE the pass's own OT is drawn, which then
 // covers it: pass frames lacked the picture and the panel flickered while the
 // camera moved. Inside a pass, uploads into the pass rect are held and applied
 // after the OT, in their original order.
-constexpr uint32_t LoadImage = 0x0007F6A0;
+constexpr uint32_t LoadImage = 0x0007F4E8;
 
 PSXDrawReplay replay;
 uint32_t vblanks = 0;
@@ -112,7 +112,7 @@ void finish(CPUState* cpu, uint32_t) {
     // Only the in-game main loop's flip; loading screens flip from a VBlank
     // callback through the same function.
     if (g_psx_render_pass_active || cpu->gpr[31] != SubmitReturn) return;
-    // The game's own first wait in 234F4: the previous frame finishes drawing
+    // The game's own first wait in 234F0: the previous frame finishes drawing
     // into the rect the next flip shows before that rect is captured.
     PSXDrawReplay::call(cpu, DrawSync, 0);
     const bool ready = replay.prepare(vblanks);
@@ -186,13 +186,13 @@ void activate(unsigned fps) {
     vblanks = 0;
     PSXDrawReplay::rate(fps, PSX_MOD_RENDER_PASS_FLIP_PENDING);
 }
-void rate50() { activate(50); }
-void rate100() { activate(100); }
+void rate60() { activate(60); }
+void rate120() { activate(120); }
 }  // namespace
 
 PSX_MOD_CONSTRUCTOR(amx_register_frame_rate_plugins) {
-    const char* ids[] = {"amx.framerate.50", "amx.framerate.100"};
-    void (*callbacks[])() = {rate50, rate100};
+    const char* ids[] = {"amx.framerate.60", "amx.framerate.120"};
+    void (*callbacks[])() = {rate60, rate120};
     for (unsigned i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i) {
         psx_mod_register_activation_plugin(ids[i], callbacks[i]);
         psx_mod_register_vblank_plugin(ids[i], tick);

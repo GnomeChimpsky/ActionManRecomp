@@ -1,0 +1,48 @@
+format_version = 5
+id = "amx.enhancement.frame-rate"
+version = "2.0.0"
+name = "Action Man Frame Rate"
+author = "ActionManRecomp"
+description = "Intermediate frames rendered with the game's own drawing code, with 3D positions placed between the game's frames. Game logic, timers and audio keep their stock cadence. Requires OpenGL."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00887"
+disc_sha256 = "9709f7473f00405efe4952d5318057c3256eca807cdc202b19736769bef66b20"
+
+[[feature]]
+id = "interpolated-rendering"
+name = "Interpolated Rendering"
+description = "Redraw the scene between the game's 30 fps frames with interpolated geometry and camera, without speeding up gameplay."
+group = "Frame Rate"
+default_enabled = false
+
+[[option]]
+feature = "interpolated-rendering"
+# Not "rate" (0.4.4 choices) nor "fps" (the PAL 50 / 100 choices): a saved
+# value that is no longer a choice would stop the mods resolving.
+id = "fps_ntsc"
+label = "Presentation rate"
+description = "60 FPS adds one in-between per 30 fps game frame and is the smoothest; 120 FPS adds three and needs a faster GPU. The game simulation is untouched. Requires OpenGL."
+group = "Frame Rate"
+type = "choice"
+default = "60"
+
+[[option.choice]]
+value = "60"
+label = "60 FPS (Recommended)"
+
+[[option.choice]]
+value = "120"
+label = "120 FPS"
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.60"
+when = { fps_ntsc = "60" }
+
+[[plugin]]
+feature = "interpolated-rendering"
+id = "amx.framerate.120"
+when = { fps_ntsc = "120" }

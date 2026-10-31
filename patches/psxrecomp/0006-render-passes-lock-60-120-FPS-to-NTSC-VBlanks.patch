@@ -1,0 +1,40 @@
+From eb0222b3e7287da132276243ba14674b3b42894d Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 31 Oct 2026 13:31:14 +0000
+Subject: [PATCH] render passes: lock 60 / 120 FPS to NTSC VBlanks
+
+NTSC VBlanks run at 59.94 Hz, so a 60 or 120 FPS output is 1.001 or
+2.002 times the source rate and missed the 1e-3 whole-multiple check:
+frame lock never engaged on an NTSC game. The tolerance is now 0.5% of
+the multiple, which still rejects rates that are really not a multiple
+(for example 75 FPS on 50 Hz).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ runtime/src/gpu_gl_renderer.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/runtime/src/gpu_gl_renderer.c b/runtime/src/gpu_gl_renderer.c
+index fa18203..b5fcbd2 100644
+--- a/runtime/src/gpu_gl_renderer.c
++++ b/runtime/src/gpu_gl_renderer.c
+@@ -9178,12 +9178,14 @@ static int xr_mirror_active(void) {
+ static int interp_present_pair(GLuint a, GLuint b, float t, int blend_mode);
+ 
+ /* Output presents per source interval when the output rate is a whole
+- * multiple of the guest VBlank rate (50 FPS on PAL = 1, 100 = 2), else 0. */
++ * multiple of the guest VBlank rate (50 FPS on PAL = 1, 100 = 2), else 0.
++ * NTSC VBlanks run at 59.94 Hz, so 60 / 120 FPS are 0.1% off a whole
++ * multiple; within 0.5% the presents still lock to the VBlank count. */
+ static uint32_t interp_presents_per_interval(void) {
+     double m;
+     if (!(s_interp_source_hz > 0.0) || !(s_interp_target_hz > 0.0)) return 0;
+     m = s_interp_target_hz / s_interp_source_hz;
+-    if (m < 0.5 || fabs(m - floor(m + 0.5)) > 1e-3) return 0;
++    if (m < 0.5 || fabs(m - floor(m + 0.5)) > 0.005 * m) return 0;
+     return (uint32_t)floor(m + 0.5);
+ }
+ /* The generation phase of the next present of this interval, counted in
+-- 
+2.43.0
+
