@@ -73,7 +73,7 @@ bash "${PACKAGER}" \
   --display-name "${DISPLAY_NAME}" \
   --recompiler-build "${RECOMPILER_BUILD}" \
   --version-env RELEASE_VERSION \
-  --disc-hint "your own Action Man: Mission Xtreme (SLES-01761) disc image" \
+  --disc-hint "your own Action Man: Operation Extreme (SLUS-00887) disc image" \
   "${EXTRA[@]}"
 
 if [[ "${OFFLINE}" == 1 ]]; then

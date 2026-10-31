@@ -15,7 +15,7 @@ project(ActionManRecomp LANGUAGES C CXX)
 # disc and is never committed. Fail early with a pointer to the documented
 # build instead of silently producing a game-less setup host. (A setup host can
 # still be requested explicitly with -DPSXRECOMP_FORCE_SETUP_HOST=ON.)
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/SLES_017.61_dispatch.c"
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/SLUS_008.87_dispatch.c"
    AND NOT PSXRECOMP_FORCE_SETUP_HOST)
     message(FATAL_ERROR
         "generated/ is missing. This repository does not contain any game code;\n"
@@ -67,8 +67,8 @@ psxrecomp_add_game_runtime(psx-runtime
     # Game C generated locally from your disc (psxrecomp_cli.py generate, run
     # by scripts/build.sh; never committed). scripts/build.sh configures with
     # -DPSXRECOMP_REQUIRE_GAME_C=ON as well.
-    GEN_MARKER "generated/SLES_017.61_dispatch.c"
-    GEN_FULL_GLOB "generated/SLES_017.61_full_*.c"
+    GEN_MARKER "generated/SLUS_008.87_dispatch.c"
+    GEN_FULL_GLOB "generated/SLUS_008.87_full_*.c"
     CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c"
     # Framework builtins Action Man does not ship. Keep this keyword last:
     # it takes every value after it.

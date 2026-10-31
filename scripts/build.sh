@@ -13,7 +13,7 @@
 #   scripts/build.sh --disc /path/to/ActionMan.cue [options]
 #
 # Options:
-#   --disc PATH        your Action Man: Mission Xtreme (Europe) .cue (required
+#   --disc PATH        your Action Man: Operation Extreme (USA) .cue (required
 #                      unless generated/ already exists from an earlier run)
 #   --windows          cross-compile Windows x64 binaries (needs LLVM_MINGW_ROOT)
 #   --build-dir DIR    game build dir (default: build-linux or build-win)
@@ -68,12 +68,12 @@ bash psxrecomp/tools/ci/build_emitters.sh --framework psxrecomp \
 
 echo "== 4/5 generate game C from your disc"
 if [[ "${SKIP_GENERATE}" == 1 ]]; then
-  [[ -f generated/SLES_017.61_dispatch.c ]] || {
+  [[ -f generated/SLUS_008.87_dispatch.c ]] || {
     echo "error: --skip-generate but generated/ is empty; pass --disc" >&2; exit 1; }
   echo "skipped (reusing generated/)"
 else
   if [[ -z "${DISC}" ]]; then
-    if [[ -f generated/SLES_017.61_dispatch.c ]]; then
+    if [[ -f generated/SLUS_008.87_dispatch.c ]]; then
       echo "no --disc given; reusing existing generated/"
     else
       echo "error: --disc /path/to/ActionMan.cue is required (see DISC.md)" >&2

@@ -2,14 +2,14 @@
   "format_version": 1,
   "game": {
     "name": "ActionMan",
-    "id": "SLES-01761",
-    "boot_exe": "SLES_017.61"
+    "id": "SLUS-00887",
+    "boot_exe": "SLUS_008.87"
   },
   "marketing": {
-    "description": "Action Man: Mission Xtreme (PAL) static recompilation",
+    "description": "Action Man: Operation Extreme (NTSC-U) static recompilation",
     "publisher": "Hasbro Interactive",
     "year": "2000",
-    "region": "Europe",
+    "region": "North America",
     "players": 1
   },
   "rom_identity": {
@@ -20,21 +20,21 @@
     ],
     "require_cue": true,
     "data_track": {
-      "size": 552705888,
-      "md5": "8e7ca51f688b0e4fa9e2e36bb6a4e8d1",
-      "sha1": "0b259a00da8ff2f7d3c3da7eb7954e2b30dd0730",
-      "crc32": "34eedfb3"
+      "size": 553089264,
+      "md5": "8b0b65e5ea7c3431ab0bb7391c81118d",
+      "sha1": "d0e4834cb0ee6aca998223c8068872972da1c869",
+      "crc32": "9d4dbbcb"
     },
-    "disc_fp": "896a51d577a37e91e8e594c1306393780b06098b03f8591ebe4374c7090de15d"
+    "disc_fp": "2840fa8500daf48622e6f6c54d9db61bba52d7c1fd3a1da8bf6e22ed9928c9a0"
   },
   "exe": {
     "load_address": "0x00018000",
-    "entry_pc": "0x00085550",
-    "text_size": "0x00090000",
+    "entry_pc": "0x00085088",
+    "text_size": "0x0008D800",
     "stack_base": "0x801FFFF0"
   },
   "seeds": {
-    "count": 977,
+    "count": 956,
     "source": "boot_exe_jal"
   },
   "warnings": [

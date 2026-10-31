@@ -2,14 +2,14 @@
 # Review before shipping. Runtime quirks / overlay seeds still need hand work.
 
 [game]
-name = "Action Man: Mission Xtreme"
-id = "SLES-01761"
+name = "Action Man: Operation Extreme"
+id = "SLUS-00887"
 players = 1
-exe = "disc/SLES_017.61"
+exe = "disc/SLUS_008.87"
 disc = "disc/ActionMan.cue"
 load_address = "0x00018000"
-entry_pc = "0x00085550"
-text_size = "0x00090000"
+entry_pc = "0x00085088"
+text_size = "0x0008D800"
 stack_base = "0x801FFFF0"
 
 # Digests are for data Track 01 (first BINARY FILE / TRACK 01).
@@ -17,16 +17,16 @@ stack_base = "0x801FFFF0"
 out_dir = "disc"
 bin_name = "ActionMan.bin"
 cue_name = "ActionMan.cue"
-boot_exe = "SLES_017.61"
-known_sizes = [552705888]
+boot_exe = "SLUS_008.87"
+known_sizes = [553089264]
 known_md5 = [
-  "8e7ca51f688b0e4fa9e2e36bb6a4e8d1",
+  "8b0b65e5ea7c3431ab0bb7391c81118d",
 ]
 known_sha1 = [
-  "0b259a00da8ff2f7d3c3da7eb7954e2b30dd0730",
+  "d0e4834cb0ee6aca998223c8068872972da1c869",
 ]
 known_crc32 = [
-  "34eedfb3",
+  "9d4dbbcb",
 ]
 
 [recompiler]
@@ -35,19 +35,19 @@ out_dir = "generated"
 strict = true
 # Hook sites for the amx.enhancement.frame-rate mod (interpolated rendering):
 # the draw-section start in the in-game main loop, the flip/submit function,
-# the sound-effect start (0x7ABDC, polls SPU voices) and libcd's command
-# write / sync / ready primitives (93A24 / 934DC / 9375C), which the game's
+# the sound-effect start (0x7AA24, polls SPU voices) and libcd's command
+# write / sync / ready primitives (9152C / 90FE4 / 91264), which the game's
 # logic calls during a frame; all are answered without device access inside a
-# pass (outside passes they run untouched). LoadImage (0x7F6A0): uploads a
+# pass (outside passes they run untouched). LoadImage (0x7F4E8): uploads a
 # pass's frame makes into the rect it draws are applied after its OT (the HQ
 # mission-select picture is blitted onto the finished frame). SpuSetMute
-# (0x8CD60): read-modify-write of SPUCNT, called while driving on City streets.
-mod_instruction_sites = ["0x0002BFC4"]
-mod_function_entry_funcs = ["0x000234F4", "0x0007ABDC",
-    "0x00093A24", "0x000934DC", "0x0009375C", "0x0007F6A0", "0x0008CD60"]
+# (0x8A658): read-modify-write of SPUCNT, called while driving on City streets.
+mod_instruction_sites = ["0x0002BF84"]
+mod_function_entry_funcs = ["0x000234F0", "0x0007AA24",
+    "0x0009152C", "0x00090FE4", "0x00091264", "0x0007F4E8", "0x0008A658"]
 
 [runtime]
-window_title = "Action Man: Mission Xtreme Recompiled"
+window_title = "Action Man: Operation Extreme Recompiled"
 debug_port = 4370
 # HLE boot: skip the BIOS logo and jump straight into the game.
 bios_hle = true
@@ -80,7 +80,7 @@ deadzone = 3277
 [netplay]
 require_cue = true
 required_tracks = 1
-required_disc_fp = "896a51d577a37e91e8e594c1306393780b06098b03f8591ebe4374c7090de15d"
+required_disc_fp = "2840fa8500daf48622e6f6c54d9db61bba52d7c1fd3a1da8bf6e22ed9928c9a0"
 
 [widescreen]
 # Widescreen is owned by the amx.enhancement.widescreen mod (Mods page); this
@@ -104,12 +104,12 @@ auto_ui_provenance = true
 # Action Man's polygon funnels reject a primitive when ALL of its vertices lie
 # beyond one screen edge, using signed screen coordinates centred on the draw
 # offset: X against -320 / +320 (0x140, or 0x141 inclusive) and Y against
-# -128 / +128. auto_screen_x widens every right-edge `slti x, 0x140|0x141` in
+# -120 / +120 (the US build's 240-line screen; PAL used -128 / +128). auto_screen_x widens every right-edge `slti x, 0x140|0x141` in
 # functions that also carry the Y signature (main EXE, captured overlays and
 # the interpreter alike). Identity at 4:3.
 auto_screen_x = true
 screen_w_imms = ["0x140", "0x141"]
-screen_h_imms = ["0x80", "0x81", "0xFF80"]
+screen_h_imms = ["0x78", "0x79", "0xFF88"]
 # The matching left-edge rejects (`slti x, -320`) in the boot EXE, moved left
 # by the live reveal margin while widened.
 slti_lower_sites = [
@@ -134,15 +134,15 @@ slti_lower_sites = [
     "0x0001B20C",
     "0x0001B224",
     "0x0001B23C",
-    "0x000408D8",
-    "0x0007C584",
-    "0x0007C59C",
-    "0x0007C5B4",
-    "0x0007C5CC",
-    "0x0007CA44",
-    "0x0007CA5C",
-    "0x0007CA74",
+    "0x00040760",
+    "0x0007C3CC",
+    "0x0007C3E4",
+    "0x0007C3FC",
+    "0x0007C414",
+    "0x0007C88C",
+    "0x0007C8A4",
+    "0x0007C8BC",
     # Level overlay (ACTION.DAT member loaded at 0x000BF710): guarded by the
     # instruction word, so other overlays at these addresses stay vanilla.
-    "0x000C77D8", "0x000C78BC",
+    "0x000C7824", "0x000C7908",
 ]
