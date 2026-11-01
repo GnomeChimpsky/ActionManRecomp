@@ -42,7 +42,7 @@ strict = true
 # pass's frame makes into the rect it draws are applied after its OT (the HQ
 # mission-select picture is blitted onto the finished frame). SpuSetMute
 # (0x8A658): read-modify-write of SPUCNT, called while driving on City streets.
-mod_instruction_sites = ["0x0002BF84"]
+mod_instruction_sites = ["0x0002BF84", "0x000C0B34", "0x000C1EAC"]
 mod_function_entry_funcs = ["0x000234F0", "0x0007AA24",
     "0x0009152C", "0x00090FE4", "0x00091264", "0x0007F4E8", "0x0008A658"]
 

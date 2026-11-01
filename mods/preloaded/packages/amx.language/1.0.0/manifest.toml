@@ -1,0 +1,23 @@
+format_version = 5
+id = "amx.language"
+version = "1.0.0"
+name = "Language Select"
+author = "ActionManRecomp"
+description = "Brings back the European flag screen so you can pick the game's language at startup."
+resolver = "declarative"
+save_compatibility = "shared"
+
+[[target]]
+game_id = "SLUS-00887"
+disc_sha256 = "9709f7473f00405efe4952d5318057c3256eca807cdc202b19736769bef66b20"
+
+[[feature]]
+id = "select"
+name = "Language select at startup"
+description = "Shows the flag screen after the logo, as on the European release: English, French, German, Spanish, Italian, Dutch, Swedish, Finnish, Norwegian or Danish text and speech. The UK flag keeps the US English text."
+group = "Language"
+default_enabled = true
+
+[[plugin]]
+feature = "select"
+id = "amx.language.select"
