@@ -1,7 +1,7 @@
 #include "mod_plugins.h"
 
 /*
- * Action Man: Mission Xtreme widescreen.
+ * Action Man: Operation Extreme (SLUS-00887) widescreen.
  *
  * The projection squash, cull widening and HUD proportion correction are
  * framework configuration ([widescreen] in game.toml). These trusted

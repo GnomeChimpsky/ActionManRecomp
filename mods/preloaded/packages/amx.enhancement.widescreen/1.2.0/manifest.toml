@@ -1,15 +1,15 @@
 format_version = 5
 id = "amx.enhancement.widescreen"
-version = "1.1.0"
+version = "1.2.0"
 name = "Action Man Widescreen"
 author = "ActionManRecomp"
-description = "Renders Action Man: Mission Xtreme with a wider field of view (16:9, 21:9 or following the window), keeping the HUD at its original proportions."
+description = "Renders Action Man: Operation Extreme with a wider field of view (16:9, 21:9 or following the window), keeping the HUD at its original proportions."
 resolver = "declarative"
 save_compatibility = "shared"
 
 [[target]]
-game_id = "SLES-01761"
-disc_sha256 = "6ec5784d3a359595083284fafe663f642dc68f801793a331dd478414f22ee341"
+game_id = "SLUS-00887"
+disc_sha256 = "9709f7473f00405efe4952d5318057c3256eca807cdc202b19736769bef66b20"
 
 [[feature]]
 id = "widescreen"
