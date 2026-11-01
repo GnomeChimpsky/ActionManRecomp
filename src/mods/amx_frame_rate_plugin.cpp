@@ -48,7 +48,7 @@ constexpr uint32_t SpuSetMute = 0x0008A658;
 // command accepted (0), sync complete (CdlComplete = 2), nothing ready (0).
 constexpr uint32_t CdCommand = 0x0009152C, CdSyncWait = 0x00090FE4, CdReadyPoll = 0x00091264;
 // libgpu LoadImage(RECT*, u_long*). The HQ mission-select picture (APART
-// overlay 0x000CB468, and its row-by-row wipe at 0x000CB43C) is uploaded
+// overlay 0x000C855C, and its row-by-row wipe at 0x000C8530) is uploaded
 // straight into the frame buffer the previous flip finished -- the rect a pass
 // draws into -- so on the console it lands on top of that finished frame. A
 // replayed section uploads it BEFORE the pass's own OT is drawn, which then

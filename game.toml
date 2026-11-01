@@ -142,7 +142,7 @@ slti_lower_sites = [
     "0x0007C88C",
     "0x0007C8A4",
     "0x0007C8BC",
-    # Level overlay (ACTION.DAT member loaded at 0x000BF710): guarded by the
+    # Level overlay (ACTION.DAT member loaded at 0x000C0804 on the US disc): guarded by the
     # instruction word, so other overlays at these addresses stay vanilla.
-    "0x000C7824", "0x000C7908",
+    "0x000C4918", "0x000C49FC",
 ]

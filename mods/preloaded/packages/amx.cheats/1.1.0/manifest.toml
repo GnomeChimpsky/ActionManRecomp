@@ -1,6 +1,6 @@
 format_version = 5
 id = "amx.cheats"
-version = "1.0.0"
+version = "1.1.0"
 name = "Action Man Cheats"
 author = "ActionManRecomp"
 description = "Switches on cheats built into the game's own developer options."
@@ -8,8 +8,8 @@ resolver = "declarative"
 save_compatibility = "shared"
 
 [[target]]
-game_id = "SLES-01761"
-disc_sha256 = "6ec5784d3a359595083284fafe663f642dc68f801793a331dd478414f22ee341"
+game_id = "SLUS-00887"
+disc_sha256 = "9709f7473f00405efe4952d5318057c3256eca807cdc202b19736769bef66b20"
 
 [[feature]]
 id = "invincibility"

@@ -1,46 +1,46 @@
 #include "mod_plugins.h"
 
 /*
- * Cheats, built on the game's own developer options.
+ * Cheats, built on the game's own developer options (US disc SLUS-00887).
  *
- * The developer menu (0x0002F810) keeps its toggles as bits of the word at
- * 0x000B3270. Bit 27 ("AM infinite health") is read when Action Man's health
+ * The developer menu (0x0002F7D0) keeps its toggles as bits of the word at
+ * 0x000B04D8. Bit 27 ("AM infinite health") is read when Action Man's health
  * drops below zero: set, the game refills it to 1000 instead of killing him
- * (0x00048760). Bit 29 is the menu's "Easy Mode". The game clears some of
- * these bits when a mission starts (0x0002F764), so they are re-asserted on
+ * (0x00048634). Bit 29 is the menu's "Easy Mode". The game clears some of
+ * these bits when a mission starts (0x0002F724), so they are re-asserted on
  * every VBlank.
  *
- * All weapons: the inventory at 0x000B5B80 keeps 32 weapon slots at +0x3FC
+ * All weapons: the inventory at 0x000B2DE8 keeps 32 weapon slots at +0x3FC
  * (ids 1..16) and one ammo halfword per weapon id at +0x41C, with the ammo
- * limit per id in the table at 0x0009E79C. Each mission sets its own loadout
+ * limit per id in the table at 0x0009BCD4. Each mission sets its own loadout
  * when it starts, so missing weapons are added (with full ammo) once the
  * loadout is in place; weapons the player already carries are left alone.
  *
  * Unlock all missions: the HQ front end (overlay 2) has its own unlock cheat
- * (0x000D155C), but it is only checked on one of the HQ screens, not on the
+ * (0x000CE648), but it is only checked on one of the HQ screens, not on the
  * mission select. It opens every mission by setting the save's mission words
- * at 0x000B5B80+0x210..+0x23C to all ones (except bit 4 of +0x228), the words
+ * at 0x000B2DE8+0x210..+0x23C to all ones (except bit 4 of +0x228), the words
  * +0x240..+0x26C to -1 (except +0x258) and the bytes +0x330..+0x332 to 1.
  * The mission select reads those words live, so the same values are written
  * here while HQ is loaded and the first word is not yet all ones. HQ's code
- * at 0x000D1548 is checked too, since other overlays share its addresses.
+ * at 0x000CE634 is checked too, since other overlays share its addresses.
  */
 
-#define AMX_DEBUG_FLAGS      0x000B3270u
+#define AMX_DEBUG_FLAGS      0x000B04D8u
 #define AMX_FLAG_INFINITE_HP 0x08000000u
 #define AMX_FLAG_EASY_MODE   0x20000000u
 
-#define AMX_GAME_MODE        0x000B2AA4u /* 0..5 = levels, 6+ = front end */
-#define AMX_INVENTORY        0x000B5B80u
+#define AMX_GAME_MODE        0x000AFD0Cu /* 0..5 = levels, 6+ = front end */
+#define AMX_INVENTORY        0x000B2DE8u
 #define AMX_WEAPON_SLOTS     (AMX_INVENTORY + 0x3FCu)
 #define AMX_WEAPON_SLOT_COUNT 32u
 #define AMX_AMMO             (AMX_INVENTORY + 0x41Cu)
-#define AMX_AMMO_LIMITS      0x0009E79Cu
+#define AMX_AMMO_LIMITS      0x0009BCD4u
 
-#define AMX_OVERLAY_ID       0x000B2E3Eu
+#define AMX_OVERLAY_ID       0x000B00A6u
 #define AMX_OVERLAY_HQ       2u
-#define AMX_HQ_CHEAT_CHECK   0x000D1548u /* lbu $v0, 0x5f7c($v1) */
-#define AMX_HQ_CHEAT_OPCODE  0x90625F7Cu
+#define AMX_HQ_CHEAT_CHECK   0x000CE634u /* lbu $v0, 0x3068($v1) */
+#define AMX_HQ_CHEAT_OPCODE  0x90623068u
 #define AMX_MISSIONS         (AMX_INVENTORY + 0x210u)
 #define AMX_MISSION_WORDS    12u
 #define AMX_MISSION_HIDDEN   (AMX_INVENTORY + 0x228u) /* bit 4 stays clear */
