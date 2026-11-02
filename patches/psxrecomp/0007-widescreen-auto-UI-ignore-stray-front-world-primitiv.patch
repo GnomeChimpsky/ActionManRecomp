@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 18:30:00 +0000
+Subject: [PATCH] widescreen auto-UI: ignore stray front world primitives for
+ overlays
+
+A screen-space overlay counts as being in front of the world when its OT
+rank is above the world's front bound. That bound was the front-most world
+primitive, so one polygon crossing the near plane and clamped to the last
+OT rank put the bound in front of the overlay and un-squashed it for that
+frame. The bound now skips up to 1% of the world's primitives (at least
+one) at the front.
+
+Fixes Action Man: Operation Extreme's bow scope flashing back to the
+stretched, broken-apart mask for a frame when looking down at the floor:
+one floor polygon at rank 1023 sat in front of the mask (1016..1022).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ runtime/src/gpu.c | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/runtime/src/gpu.c b/runtime/src/gpu.c
+index 9a0d3da..5cf6b53 100644
+--- a/runtime/src/gpu.c
++++ b/runtime/src/gpu.c
+@@ -7026,9 +7026,20 @@ void gpu_ws_prepass_linked_list(uint32_t start_addr) {
+      * kinds: squashing only the axis-aligned pieces tore holes in the mask
+      * and split the bow's wings. */
+     if (provenance && ws_ui_world_total) {
+-        uint32_t world_max = 0;
+-        for (uint32_t r = 0; r < WS_UI_WORLD_RANKS; r++)
+-            if (ws_ui_world_rank_count[r]) world_max = r;
++        /* The front of the world, ignoring a stray front-most primitive or
++         * two: a polygon crossing the near plane can be clamped to the last
++         * OT rank, in front of the overlay. Up to 1% of the world (at least
++         * one primitive) may lie in front of the bound. Action Man's bow scope
++         * looking down at the floor put one floor polygon at rank 1023, in
++         * front of the mask (1016..1022), and the whole scope un-squashed for
++         * that frame. */
++        uint32_t world_max = 0, stray = ws_ui_world_total / 100u + 1u;
++        for (uint32_t r = WS_UI_WORLD_RANKS; r-- > 0;) {
++            const uint32_t c = ws_ui_world_rank_count[r];
++            if (!c) continue;
++            if (c > stray) { world_max = r; break; }
++            stray -= c;
++        }
+         for (uint32_t i = 0; i < ws_ui_prepass_count; i++) {
+             if (ws_ui_prepass[i].enclosed_only &&
+                 ws_ui_prepass[i].ot_rank > world_max) {
+-- 
+2.43.0
