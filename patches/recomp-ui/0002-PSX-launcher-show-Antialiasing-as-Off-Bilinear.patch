@@ -1,0 +1,100 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 19:20:00 +0000
+Subject: [PATCH] PSX launcher: show Antialiasing as Off / Bilinear
+
+PSXRecomp's [video] antialiasing is the linear present filter, a plain
+on/off switch. The launcher drew it as an MSAA sample count: a game.toml
+`true` showed as "On", and cycling offered 2x / 4x / 8x, which all wrote
+the same `true`. A host can now declare antialiasing_is_filter; the row
+then toggles between Off and Bilinear, with a tooltip saying what it does.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+diff --git a/src/common/backends/imgui/launcher_imgui.cpp b/src/common/backends/imgui/launcher_imgui.cpp
+index c2612cd..d3bb6a2 100644
+--- a/src/common/backends/imgui/launcher_imgui.cpp
++++ b/src/common/backends/imgui/launcher_imgui.cpp
+@@ -4228,6 +4228,11 @@ void draw_display_controls(LauncherModel* m, const LauncherTheme& th) {
+         if (ImGui::Button(ui_text(launcher_model_aa_label(m)), ImVec2(px(SETTINGS_CTRL_W), px(30))))
+             launcher_model_cycle_aa(m);
+         ImGui::PopID();
++        if (m->antialiasing_is_filter &&
++            ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
++            ImGui::SetTooltip("%s", ui_text(
++                "Bilinear smooths the picture when it is scaled to the window.\n"
++                "Off keeps hard pixels and costs less GPU time."));
+     }
+ 
+     /* FMV reconstruction. Distinct from Texture filtering above: that samples
+diff --git a/src/common/launcher_model.c b/src/common/launcher_model.c
+index febe98d..ff049e2 100644
+--- a/src/common/launcher_model.c
++++ b/src/common/launcher_model.c
+@@ -396,6 +396,7 @@ void launcher_model_init(LauncherModel* m,
+         m->has_renderer         = game->has_renderer != 0;
+         m->has_supersampling    = game->has_supersampling != 0;
+         m->has_antialiasing     = game->has_antialiasing != 0;
++        m->antialiasing_is_filter = game->antialiasing_is_filter != 0;
+         m->has_texture_filter   = game->has_texture_filter != 0;
+         if (game->texture_filter_labels && game->texture_filter_values &&
+             game->num_texture_filters > 0) {
+@@ -2084,6 +2085,12 @@ const char* launcher_model_supersampling_label(const LauncherModel* m) {
+ // wraps 0 -> 2 -> 4 -> 8 -> 0. A legacy on/off host value of 1 is treated as
+ // "on" by the label and advances to Off on the next cycle.
+ void launcher_model_cycle_aa(LauncherModel* m) {
++    /* A host whose antialiasing is a present filter has two states: a sample
++     * count there would be a label for a setting that does not exist. */
++    if (m->antialiasing_is_filter) {
++        m->s.antialiasing = m->s.antialiasing ? 0 : 1;
++        return;
++    }
+     switch (m->s.antialiasing) {
+         case 0:  m->s.antialiasing = 2; break;
+         case 2:  m->s.antialiasing = 4; break;
+@@ -2093,6 +2100,7 @@ void launcher_model_cycle_aa(LauncherModel* m) {
+ }
+ 
+ const char* launcher_model_aa_label(const LauncherModel* m) {
++    if (m->antialiasing_is_filter) return m->s.antialiasing ? "Bilinear" : "Off";
+     switch (m->s.antialiasing) {
+         case 0:  return "Off";
+         case 2:  return "2x";
+diff --git a/src/common/launcher_model.h b/src/common/launcher_model.h
+index d01602e..baf2097 100644
+--- a/src/common/launcher_model.h
++++ b/src/common/launcher_model.h
+@@ -447,6 +447,7 @@ typedef struct {
+     bool     has_renderer;
+     bool     has_supersampling;
+     bool     has_antialiasing;
++    bool     antialiasing_is_filter;   /* Off / Bilinear toggle, not 2x/4x/8x */
+     bool     has_texture_filter;
+     const char* const* texture_filter_labels;   /* host catalog (game info), or NULL */
+     const int*         texture_filter_values;
+diff --git a/src/consoles/psx/psx_profile.h b/src/consoles/psx/psx_profile.h
+index abb82c3..24dc79d 100644
+--- a/src/consoles/psx/psx_profile.h
++++ b/src/consoles/psx/psx_profile.h
+@@ -160,6 +160,7 @@ static inline void launcher_profile_apply_psx(RecompLauncherCGameInfo* gi) {
+     // Full PS1 settings surface.
+     gi->has_window_size = 1; gi->has_renderer = 1; gi->has_supersampling = 1;
+     gi->has_antialiasing = 1; gi->has_texture_filter = 1; gi->has_screen_kind = 1;
++    gi->antialiasing_is_filter = 1;  /* [video] antialiasing = linear present on/off */
+     gi->has_fmv_filter = 1;    /* MDEC decodes video at native res; how it is
+                                 * scaled to the window is a player choice. */
+     gi->has_frame_interp = 0; gi->has_spu_hq = 1; gi->has_skip_fmv = 0;
+diff --git a/src/recomp_launcher.h b/src/recomp_launcher.h
+index c3ff46e..ec75032 100644
+--- a/src/recomp_launcher.h
++++ b/src/recomp_launcher.h
+@@ -1749,6 +1749,7 @@ typedef struct RecompLauncherCGameInfo {
+     int  has_renderer;          // Software/OpenGL toggle
+     int  has_supersampling;
+     int  has_antialiasing;
++    int  antialiasing_is_filter; // AA is a smooth/sharp present filter (off/on), not an MSAA count
+     int  has_texture_filter;    // Nearest/Bilinear (else the legacy Linear filtering checkbox stays)
+     int  has_screen_kind;       // CRT/screen-model filter
+     int  has_frame_interp;
+-- 
+2.43.0

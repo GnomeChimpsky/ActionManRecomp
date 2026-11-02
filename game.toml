@@ -59,7 +59,10 @@ renderer = "opengl"
 aspect_ratio = "4:3"
 # High internal resolution by default (launcher: Settings > Display).
 internal_resolution = "1440p"
-antialiasing = true
+# Antialiasing is the bilinear present filter (launcher: Off / Bilinear). Off by
+# default: with widescreen at 60 Hz the filtered wide present can overrun the
+# frame budget and stutter.
+antialiasing = false
 texture_filtering = "nearest"
 fmv_filter = "bicubic"
 # OpenGL render thread on by default.
