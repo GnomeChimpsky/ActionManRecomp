@@ -80,8 +80,6 @@ The **Mods** page lists the bundled mods. All are off until you enable them:
   Raise it gradually; very high values can stall a load.
 - **HD Texture Packs** – loads DuckStation-compatible replacement textures
   (OpenGL) or dumps the originals. No artwork is included.
-- **8 MB Main RAM** and **Fast Loading (host pacing)** – generic options that
-  Action Man does not need.
 
 ### Hotkeys
 

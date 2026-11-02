@@ -72,7 +72,7 @@ psxrecomp_add_game_runtime(psx-runtime
     CODEGEN_SETUP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/codegen_setup.c"
     # Framework builtins Action Man does not ship. Keep this keyword last:
     # it takes every value after it.
-    EXCLUDE_BUILTIN_MODS psx.presentation.bezel
+    EXCLUDE_BUILTIN_MODS psx.presentation.bezel psx.enhancement.8mb-ram psx.enhancement.fast-loading
 )
 
 # Action Man's own mod plugins (widescreen, frame rate).
