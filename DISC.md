@@ -7,14 +7,16 @@ you need your own copy of the game, dumped from a disc you own.
 
 | | |
 |---|---|
-| Title | Action Man: Mission Xtreme (PAL, Europe; sold in the UK as *Action Man: Mission Extreme*) |
-| Serial | `SLES-01761` |
-| Boot executable | `SLES_017.61` |
+| Title | Action Man: Operation Extreme (NTSC-U, North America) |
+| Serial | `SLUS-00887` |
+| Boot executable | `SLUS_008.87` |
 | Publisher / developer | Hasbro Interactive / Interactive Studios, 2000 |
 
-Other releases (the North American *Action Man: Operation Extreme*,
-`SLUS-00887`, re-releases with a different serial, demo discs) are **not**
-supported. The recompiled code is generated from this exact executable.
+Other releases are **not** supported: the European *Action Man: Mission
+Xtreme* (`SLES-01761`, supported up to 0.5.0), re-releases with a different
+serial and demo discs. The recompiled code is generated from this exact
+executable. The US disc carries all ten European languages and their
+voice-over; the *Language Select* mod makes them selectable.
 
 ## Expected dump
 
@@ -22,15 +24,14 @@ A single `MODE2/2352` data track in raw BIN/CUE form:
 
 | Data track (`.bin`) | Value |
 |---|---|
-| Size | 552,705,888 bytes |
-| CRC32 | `34eedfb3` |
-| MD5 | `8e7ca51f688b0e4fa9e2e36bb6a4e8d1` |
-| SHA-1 | `0b259a00da8ff2f7d3c3da7eb7954e2b30dd0730` |
+| Size | 553,089,264 bytes |
+| CRC32 | `9d4dbbcb` |
+| MD5 | `8b0b65e5ea7c3431ab0bb7391c81118d` |
+| SHA-1 | `d0e4834cb0ee6aca998223c8068872972da1c869` |
 
 These are the values `game.toml` (`[prepare_disc]`) checks. They come from the
-dump this project was developed and tested with. A clean dump of
-`SLES-01761` made with a Redump-style tool is expected to match, but the
-values have not been compared against the Redump database entry yet.
+dump this project was developed and tested with; the SHA-1 matches the
+TASVideos-verified dump of `SLUS-00887`.
 
 A matching `.cue` looks like this (the file name may differ):
 
@@ -55,8 +56,8 @@ FILE "ActionMan.bin" BINARY
 
 1. checks the track against the size and hashes above (a mismatch stops the
    build);
-2. copies the image into `disc/` and extracts `SLES_017.61` there;
-3. translates `SLES_017.61` into C under `generated/`.
+2. copies the image into `disc/` and extracts `SLUS_008.87` there;
+3. translates `SLUS_008.87` into C under `generated/`.
 
 `disc/` and `generated/` are git-ignored: they are copies of, or derived
 from, the copyrighted game and must never be committed or published.

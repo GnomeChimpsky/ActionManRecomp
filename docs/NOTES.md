@@ -1,5 +1,13 @@
 # Action Man: Mission Xtreme — reverse-engineering notes
 
+> Since 0.6.0 the project builds from the US disc (`SLUS-00887`, boot EXE
+> `SLUS_008.87`, entry `0x00085088`). The notes below were written for the PAL
+> disc (`SLES-01761`); the code is the same game recompiled for NTSC with
+> shifted addresses. Current US addresses live in `game.toml` and the mod
+> sources (`src/mods/`). US level overlays run at `0xC0804` + file offset
+> (PAL `0xC3710`), and the language word is `0x9BFF8` (PAL `0x9EAC0`, US default
+> 10 = US English).
+
 Addresses are KUSEG (the boot EXE is linked and runs at `0x000xxxxx`, not
 `0x800xxxxx`).
 

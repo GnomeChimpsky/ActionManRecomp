@@ -4,8 +4,9 @@
        width="100%">
 </p>
 
-A static recompilation of **Action Man: Mission Xtreme** (PlayStation, PAL,
-`SLES-01761`) into a native PC program, built on
+A static recompilation of **Action Man: Operation Extreme** (PlayStation,
+NTSC-U, `SLUS-00887`; released in Europe as *Mission Xtreme*) into a native
+PC program, built on
 [PSXRecomp](https://github.com/mstan/psxrecomp) v4 and
 [recomp-ui](https://github.com/RetroPortingToolKit/recomp-ui), following the
 method of [ApeEscapeRecomp](https://github.com/mstan/ApeEscapeRecomp).
@@ -36,8 +37,9 @@ Releases are published on the
 1. Extract the zip for your platform into a folder of its own.
 2. Run `ActionManRecomp.exe` (Windows) or `ActionManRecomp` (Linux).
 3. In the launcher, select your own disc image – a raw BIN/CUE of
-   *Action Man: Mission Xtreme* (PAL, `SLES-01761`); see [DISC.md](DISC.md).
-   Do not convert it to `.iso`.
+   *Action Man: Operation Extreme* (US, `SLUS-00887`); see [DISC.md](DISC.md).
+   Do not convert it to `.iso`. Since 0.6.0 the PAL disc (`SLES-01761`) is
+   no longer supported; PAL owners can stay on 0.5.0.
 4. Play. Saves go to `saves/`, settings next to the executable. OpenBIOS is
    included; no BIOS dump is needed.
 
@@ -50,10 +52,11 @@ ignored and rebuilt automatically.
 The launcher opens before the game. Its **Settings** pages cover:
 
 - **Video** – renderer (OpenGL is recommended), window size and
-  fullscreen, internal resolution (up to 8K, default 1440p), antialiasing,
+  fullscreen, internal resolution (up to 8K, default 1440p), antialiasing
+  (*Off* / *Bilinear*: a smoothing filter on the final image, off by default),
   texture and FMV filtering, screen model and scanlines, VSync, and the
-  *Render thread* and *Present thread* options. For a higher frame rate use
-  the Frame Rate mod.
+  *Render thread* and *Present thread* options (greyed out while the Frame
+  Rate mod is on). For a higher frame rate use the Frame Rate mod.
 - **Audio** – volume and high-quality SPU (sound chip) emulation.
 - **Input** – DualShock analog or digital pad, button bindings and
   analog deadzone.
@@ -62,12 +65,17 @@ The launcher opens before the game. Its **Settings** pages cover:
 
 ### Mods
 
-The **Mods** page lists the bundled mods. All are off until you enable them:
+The **Mods** page lists the bundled mods. All except Language Select are off
+until you enable them:
 
+- **Action Man Language Select** (on by default) – the European flag screen
+  at start-up: English, French, German, Spanish, Italian, Dutch, Swedish,
+  Finnish, Norwegian and Danish, with their voice-over. English uses the US
+  text. Turn it off to boot straight into US English.
 - **Action Man Widescreen** – 16:9, 21:9 or *Adaptive* (follows the window
   shape), with the HUD kept at its original proportions.
-- **Action Man Frame Rate** – draws extra in-between frames at 50 FPS
-  (default, recommended) or 100 FPS, while game logic, timers and audio
+- **Action Man Frame Rate** – draws extra in-between frames at 60 FPS
+  (default, recommended) or 120 FPS, while game logic, timers and audio
   keep their original pace. Needs OpenGL; see [Frame rate](#frame-rate).
 - **Action Man Cheats** – in the *Cheats* group: *Invincibility* (health
   refills instead of running out), *All weapons* (every weapon with full ammo
@@ -93,14 +101,18 @@ Defaults (change them under **Settings › Hotkeys**):
 
 - Vertex wobble as on original hardware
 - Minor HUD glitches due to widescreen rendering
-- Short judders remain in the heaviest scenes
-- Savestates are tied to the build and may not load across versions
+- Frame Rate mod: 30 fps scenes at 60 FPS show a mild uneven cadence, and
+  120 FPS pacing is uneven; 60 FPS is recommended
+- A fresh install judders on the first visit to each area until that level's
+  code has been compiled (see [Level code](#level-code))
+- Savestates are tied to the build and may not load across versions; PAL
+  savestates do not load in 0.6.0
 
 ## Status
 
 | Area | State |
 |---|---|
-| Boot (OpenBIOS, BIOS logo skipped) | ✅ language select → intro FMV → title |
+| Boot (OpenBIOS, BIOS logo skipped) | ✅ language select (mod) → intro FMV → title |
 | Front end / HQ apartment | ✅ menus, briefings, mission select, options |
 | Briefing voice-over (XA audio) | ✅ fixed in 0.4.1 (see below) |
 | Gameplay: city streets (driving) | ✅ playable, digital and analog input |
@@ -109,7 +121,8 @@ Defaults (change them under **Settings › Hotkeys**):
 | Controller | ✅ DualShock analog by default (the game locks analog mode itself) |
 | Internal resolution | ✅ native up to 8K, default 1440p (OpenGL) |
 | Widescreen 16:9 / 21:9 / adaptive | ✅ optional mod; HUD kept at 4:3 proportions |
-| High frame rate | ✅ optional *Action Man Frame Rate* mod, 50 FPS (default) or 100 FPS |
+| High frame rate | ✅ optional *Action Man Frame Rate* mod, 60 FPS (default) or 120 FPS |
+| Languages | ✅ ten languages with voice-over via the *Language Select* mod |
 | PGXP | ✅ built in; enable the bundled PGXP mod |
 | Level code streamed from disc | ✅ interpreted on first visit, compiled to native code on your machine as you play |
 | Complete playthrough | ⚠️ not yet verified |
@@ -160,6 +173,20 @@ Defaults (change them under **Settings › Hotkeys**):
   left its panel and the bow's wings came apart. Slanted 2D drawn in front of
   the whole world is now corrected with them, and pieces on the screen edge
   still reach the edges of the wide image. (`patches/psxrecomp/0005-…`)
+- **0.6.0 – US disc.** The game is now built from the US release,
+  *Operation Extreme* (`SLUS-00887`), and runs at its native 60 Hz; the PAL
+  code was sped up 1.2× per frame for 50 Hz, so the US code gives the right
+  speed at 60. All mods are ported, and the new *Language Select* mod brings
+  back the European flag screen (all ten languages and voices are on the US
+  disc). The Frame Rate mod now offers 60 / 120 FPS, locked to the NTSC
+  VBlanks, and shows each in-between at its proper time (in 20 fps scenes one
+  image used to stay up ~30 ms and the next ~4 ms). The bow scope no longer
+  flashes apart when a floor polygon touches the near plane. Launcher:
+  Antialiasing is shown as Off / Bilinear and is off by default; the 8 MB RAM
+  and Fast Loading mods are removed. Installing in a deep folder (paths over
+  260 characters) no longer stops the level-code cache from loading, which
+  caused a freeze every 6 seconds. (`patches/psxrecomp/0006-…` to `0010-…`,
+  `patches/recomp-ui/0002-…`)
 
 Savestates are tied to the exact build and do not load across versions.
 
@@ -262,7 +289,14 @@ to the framework are kept as patches and applied by `scripts/apply_patches.sh`:
 | `psxrecomp/0002-widescreen-auto-UI-admit-see-through-…` | widescreen HUD: see-through backing panels are HUD at any OT rank |
 | `psxrecomp/0003-widescreen-auto-UI-classify-HUD-by-vertex-provenance` | widescreen HUD: HUD vs world by vertex provenance (`auto_ui_provenance`) |
 | `psxrecomp/0004-render-passes-show-the-real-frame-and-lock-presents-…` | render passes: show the real frame between in-betweens; lock presents to the guest's VBlanks |
-| `recomp-ui/0001-PSX-launcher-show-Render-thread-Present-thread-…` | launcher: render thread / present thread settings (no generic Smooth motion) |
+| `psxrecomp/0005-widescreen-auto-UI-squash-slanted-front-overlays-…` | widescreen HUD: slanted 2D drawn in front of the world (bow scope) keeps its proportions |
+| `psxrecomp/0006-render-passes-lock-60-120-FPS-to-NTSC-VBlanks` | render passes: frame lock also at 60 / 120 FPS on 59.94 Hz NTSC |
+| `psxrecomp/0007-widescreen-auto-UI-ignore-stray-front-world-…` | widescreen HUD: a single near-plane world polygon no longer breaks the scope |
+| `psxrecomp/0008-overlay-autocapture-back-off-…` | level code: back off when a background compile does not help |
+| `psxrecomp/0009-overlay-cache-load-shards-when-the-install-path-is-l…` | level code: load the cache from install paths over 260 characters; long-path-aware exe |
+| `psxrecomp/0010-render-passes-present-the-next-in-between-on-time-…` | render passes: present the next in-between on time while passes run |
+| `recomp-ui/0001-PSX-launcher-show-Render-thread-Present-thread-…` | launcher: render thread / present thread settings (no generic Smooth motion), greyed out with the Frame Rate mod |
+| `recomp-ui/0002-PSX-launcher-show-Antialiasing-as-Off-Bilinear` | launcher: Antialiasing shown as the Off / Bilinear filter it is |
 
 Applying them to the pinned commits reproduces the framework trees the
 released builds were made from exactly. To update the framework, move the
@@ -278,7 +312,7 @@ any patch that no longer applies, then refresh `framework_pins.txt` with
    Keep the raw `.bin`; do not convert it to `.iso`.
 3. OpenBIOS is included; a retail BIOS is optional.
 4. Optional features on the **Mods** page: *Action Man Widescreen*
-   (16:9 / 21:9 / adaptive), *Action Man Frame Rate*, *PGXP*, *CD Speed*. **Settings › Display**: internal
+   (16:9 / 21:9 / adaptive), *Action Man Frame Rate*, *Language Select*, *PGXP*, *CD Speed*. **Settings › Display**: internal
    resolution, antialiasing, texture filtering, render thread.
 
 ### The level-code toolchain
@@ -306,8 +340,8 @@ contain code from the game: never commit or publish them.
 
 ### Frame rate
 
-The game runs its logic once per rendered frame, at 25 fps (PAL 50 Hz / 2)
-or lower in heavy scenes, as on a console. Running the emulated CPU faster
+The game runs its logic once per rendered frame, at 30 fps (NTSC 60 Hz / 2),
+or 20 fps in heavy scenes, as on a console. Running the emulated CPU faster
 also speeds up the game, so it is not used. Instead, the **Action Man Frame
 Rate** mod uses PSXRecomp's render passes: between two game frames it
 restores the machine to the start of the frame's draw code, replays the
@@ -317,17 +351,18 @@ timers and audio keep their original pace. Use it with the OpenGL renderer.
 The framework's generic *Smooth motion* option is not offered, because it
 causes stutter and texture flicker in this game.
 
-*Presentation rate* offers two settings, both whole multiples of the game's
-25 fps:
+*Presentation rate* offers two settings, both whole multiples of the 60 Hz
+VBlank rate, so presents stay locked to the game's frames:
 
-- **50 FPS** (default, recommended): one in-between per game frame. It is the
-  smoothest and fits the time a pass needs at high internal resolutions.
-- **100 FPS**: three in-betweens per game frame; needs a faster GPU.
+- **60 FPS** (default, recommended): one or two in-betweens per game frame
+  (30 / 20 fps scenes).
+- **120 FPS**: three to five in-betweens per game frame; needs a faster PC,
+  and its pacing is still uneven.
 
-Since 0.4.5 the other rates (display refresh, 60, 75, 90, 120, 144, 165 and
-240 FPS) are gone: most do not divide 25 fps evenly and judder, and 75 FPS
-looked worse than 50. A rate chosen in an older version is not carried over; the
-mod starts at 50 FPS.
+Each in-between replays the game's own logic and drawing, so a pass costs
+several milliseconds of CPU. The 50 / 100 FPS rates of 0.4.5–0.5.0 were for
+the PAL disc and are gone; a rate chosen in an older version is not carried
+over, and the mod starts at 60 FPS.
 
 ## Distribution
 
@@ -349,7 +384,7 @@ What the **release downloads** contain:
 - **No game assets and no disc data.** Graphics, audio, video, levels and
   text are read from your disc image at run time.
 - **The game executable contains a machine translation of the game's program
-  code** (the boot executable `SLES_017.61`, translated to C and compiled),
+  code** (the boot executable `SLUS_008.87`, translated to C and compiled),
   together with this project's code and the PSXRecomp runtime.
 - **No precompiled level code.** Level code is read from your disc and, if
   compiled, compiled on your machine.
@@ -379,7 +414,7 @@ please open an issue.
     `psxrecomp/runtime/licenses/` and the submodules. Packages include all of
     these notices in `licenses/`.
   - `assets/psxrecomp.*` are PSXRecomp's icon, copied from the framework.
-- **Action Man: Mission Xtreme**, its code, audio, video and artwork are
+- **Action Man: Operation Extreme** / **Mission Xtreme**, its code, audio, video and artwork are
   copyright their respective owners. *Action Man* is a trademark of Hasbro.
   This project is not affiliated with or endorsed by Hasbro, Interactive
   Studios or Sony. *PlayStation* is a trademark of Sony Interactive

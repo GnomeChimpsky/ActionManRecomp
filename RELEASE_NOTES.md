@@ -1,5 +1,48 @@
 # Release notes
 
+## 0.6.0
+
+**Downloads**:
+
+- `Action-Man-Recomp-0.6.0-windows-x64.zip`
+- `Action-Man-Recomp-0.6.0-linux-x64.zip`
+
+**Changes since 0.5.0**
+
+- Now built from the US disc, *Action Man: Operation Extreme* (`SLUS-00887`),
+  running at its native 60 Hz. The PAL code was sped up for 50 Hz, so the US
+  code gives the right speed and timing at 60 Hz. The PAL disc is no longer
+  supported; PAL owners can stay on 0.5.0.
+- Mods: new *Action Man Language Select* (on by default) brings back the
+  European flag screen: ten languages with their voice-over, English uses the
+  US text.
+- Mods: *Action Man Frame Rate* now offers 60 FPS (default) and 120 FPS,
+  locked to the NTSC VBlanks, and shows each in-between at its proper time.
+  In 20 fps scenes at 60 FPS one image used to stay up ~30 ms and the next
+  ~4 ms; frame times are now mostly within 2 ms of target.
+- Mods: *Action Man Widescreen* and *Action Man Cheats* are ported to the US
+  disc. The bow scope no longer briefly flashes apart when a floor polygon
+  touches the camera's near plane.
+- Launcher: *Antialiasing* is off by default and shown as *Off* / *Bilinear*,
+  which is what it is (the old 2x/4x/8x choices all did the same). *Render
+  thread* and *Present thread* are greyed out while the Frame Rate mod is on.
+  The *8 MB Main RAM* and *Fast Loading* mods are removed.
+- Installing in a deep folder (paths over 260 characters) no longer stops the
+  level-code cache from loading, which made everything run interpreted with a
+  ~120 ms freeze every 6 seconds. The background compiler also backs off when
+  a compile does not help.
+
+**Known issues**
+
+- Vertex wobble as on original hardware
+- Minor HUD glitches due to widescreen rendering
+- Frame Rate mod: mild uneven cadence in 30 fps scenes at 60 FPS; 120 FPS
+  pacing is uneven
+- A fresh install judders on the first visit to each area until that level's
+  code has been compiled
+- Savestates are tied to the build and do not load across versions (PAL
+  savestates do not load)
+
 ## 0.5.0
 
 **Downloads**:
