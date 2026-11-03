@@ -1,0 +1,106 @@
+From ab25851dcf08d057d5167e92c28957c7ffc9299e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 18:41:47 +0000
+Subject: [PATCH] render passes: present the next in-between on time while
+ passes run
+
+At frame-locked rates the passes for the next game frame run on the
+emulation thread, often right after a present, and hold it past the
+following VBlank's deadline. That VBlank shows the current frame's next
+in-between, whose image already exists, but it was only presented when the
+guest finally reached the VBlank: in 20 fps scenes at 60 FPS one image
+stayed up ~30 ms and the next ~4 ms.
+
+gl_renderer_pass_service_presents() now presents that next interval's
+first deadline itself (waiting up to 0.35 output periods when it is close),
+within the same game frame only, and the next interval skips it. Measured
+on Action Man (RTX 3080, 20 fps scene): intervals off by more than 2 ms
+73% -> 12%, max 112 -> 28 ms.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XzXUZq7vwGiGRkJ8nhd4G3
+---
+ runtime/src/gpu_gl_renderer.c | 47 ++++++++++++++++++++++++++++++++++-
+ 1 file changed, 46 insertions(+), 1 deletion(-)
+
+diff --git a/runtime/src/gpu_gl_renderer.c b/runtime/src/gpu_gl_renderer.c
+index b5fcbd2..a364128 100644
+--- a/runtime/src/gpu_gl_renderer.c
++++ b/runtime/src/gpu_gl_renderer.c
+@@ -678,6 +678,11 @@ static int pass_gen_present(uint64_t deadline, double frame_p);
+ static uint32_t interp_presents_per_interval(void);
+ static double pass_frame_phase(void);
+ static uint32_t s_interval_presents;   /* presents made in this source interval */
++/* Frame-locked rates: the next interval's first present, made early from
++ * gl_renderer_pass_service_presents() while a render pass held the emulation
++ * thread past its deadline (pass phase it showed; 0 = none). */
++static double   s_pre_present_phase = 0.0;
++static int      s_pre_presented = 0;
+ /* PSX_PRESENT_LOG: the last render-pass present (see present_log_swap). */
+ static int      s_plog_pass = 0;
+ static uint64_t s_plog_order = 0;
+@@ -7822,13 +7827,23 @@ static void interp_present_source_interval(void) {
+     /* A whole-multiple rate keeps its output grid on the source interval:
+      * exactly m deadlines, the last at the interval's end. */
+     s_interval_presents = 0;
+-    if (interp_presents_per_interval())
++    uint32_t pre_skip = 0;
++    if (interp_presents_per_interval()) {
+         s_interp_schedule.next_present_deadline =
+             s_interp_schedule.frame_start + s_interp_schedule.target_period;
++        /* Its first present was already made while a pass ran: skip that
++         * deadline, unless a flip (new frame) moved the phase meanwhile. */
++        if (s_pre_presented &&
++            fabs(s_interp_phase_lo - s_pre_present_phase) < 1e-6)
++            pre_skip = 1;
++    }
++    s_pre_presented = 0;
++    s_interval_presents = pre_skip;
+ 
+     while (frame_interpolation_schedule_next(
+                &s_interp_schedule, SDL_GetPerformanceCounter(),
+                &deadline, &alpha)) {
++        if (pre_skip) { pre_skip--; continue; }
+         const double frame_p = pass_frame_phase();
+         if (frame_p == -2.0) continue;   /* this VBlank's presents are made */
+         interp_wait_until(deadline, frequency);
+@@ -9266,6 +9281,36 @@ void gl_renderer_pass_service_presents(void) {
+         s_interval_presents++;
+         s_pgen_early++;
+     }
++    /* Frame-locked rates: passes for the next game frame run on the emulation
++     * thread, often right after a present, and hold it past the following
++     * VBlank's deadline. That VBlank still shows the current frame's next
++     * in-between, whose image already exists: present it on time from here
++     * (waiting briefly when the deadline is close) instead of when the guest
++     * finally reaches the VBlank, which showed one image for ~30 ms and the
++     * next for ~4 ms in 20 fps scenes. Only within one game frame: a phase
++     * of 1 is the next flip, which the guest has not made yet. */
++    {
++        const uint32_t m = interp_presents_per_interval();
++        if (m && !s_pre_presented && s_interval_presents >= m &&
++            s_interp_phase_hi < 1.0 - 1e-6) {
++            const double span = s_interp_schedule.frame_end -
++                                s_interp_schedule.frame_start;
++            const double nd = s_interp_schedule.frame_end + span / (double)m;
++            const double bound = 0.35 * s_interp_schedule.target_period;
++            const uint64_t freq = SDL_GetPerformanceFrequency();
++            const double now_d = (double)SDL_GetPerformanceCounter();
++            if (span > 0.0 && now_d + bound >= nd) {
++                if (now_d < nd) interp_wait_until((uint64_t)(nd + 0.5), freq);
++                latency_ring_mark(LAT_SWAP_BEGIN);
++                if (pass_gen_present((uint64_t)(nd + 0.5), s_interp_phase_hi)) {
++                    s_pre_presented = 1;
++                    s_pre_present_phase = s_interp_phase_hi;
++                    s_pgen_early++;
++                }
++                latency_ring_mark(LAT_SWAP_END);
++            }
++        }
++    }
+ }
+ 
+ void gl_renderer_pass_diag(uint64_t out[10]) {
+-- 
+2.43.0
+
