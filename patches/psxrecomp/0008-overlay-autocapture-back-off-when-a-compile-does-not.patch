@@ -1,0 +1,121 @@
+From 5ea2e9e3dabfb815a01cd7a114b24b85a2b581d8 Mon Sep 17 00:00:00 2001
+From: Action Man Recomp <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 12:05:06 +0000
+Subject: [PATCH] overlay autocapture: back off when a compile does not remove
+ the pressure
+
+A provider run is now judged by the interpreter pressure it was meant to
+remove. If pressure measured over the first full sampling window after the
+compile finished has not at least halved, the run counts as futile and the
+cooldown doubles (up to the existing 64x cap); clearly higher pressure than
+the futile level (new code) restores normal cadence.
+
+Without this, code whose captured pages change on every fire got a new
+manifest and a new DLL each time while still running interpreted, and each
+fire's process spawn and cache rescan on the emulation thread caused a
+~100 ms hitch every ~6 s for the whole session.
+---
+ runtime/src/overlay_capture.c | 66 +++++++++++++++++++++++++++++++++--
+ 1 file changed, 63 insertions(+), 3 deletions(-)
+
+diff --git a/runtime/src/overlay_capture.c b/runtime/src/overlay_capture.c
+index d525bfd..ffc41c9 100644
+--- a/runtime/src/overlay_capture.c
++++ b/runtime/src/overlay_capture.c
+@@ -1007,6 +1007,22 @@ static uint64_t s_autocap_provider_retry_frame = 0;
+ static unsigned s_autocap_provider_attempts = 0;
+ static uint64_t s_autocap_last_check_ms = 0; /* host twin of last_check      */
+ static uint64_t s_autocap_next_ok_ms    = 0; /* host twin of next_ok         */
++/* Outcome check. The manifest/candidate test above cannot see a compile that
++ * succeeds but never takes over: interpreted code whose captured page bytes
++ * differ on every fire (data sharing the code's pages) gets a new manifest and
++ * a new DLL each time, while the live code keeps running interpreted. Every
++ * fire then costs a provider spawn plus a cache rescan on the emulation thread
++ * -- a visible ~100 ms hitch -- every cooldown, forever. So a provider run is
++ * judged by the pressure it was meant to remove: measured over the first full
++ * sampling window after the compile finished, pressure that did not at least
++ * halve counts as futile and doubles the cooldown; pressure well above the
++ * last futile level (new code) restores normal cadence. */
++static int      s_autocap_outcome_state = 0;  /* 0 none, 1 compiling, 2 armed */
++static uint64_t s_autocap_fire_insns    = 0;  /* insns_delta at the last fire  */
++static uint64_t s_autocap_fire_disp     = 0;  /* dispatch delta at last fire   */
++static uint64_t s_autocap_futile_insns  = 0;  /* pressure level judged futile  */
++static uint64_t s_autocap_futile_disp   = 0;
++static uint32_t s_autocap_outcome_futile = 0; /* telemetry                     */
+ 
+ static uint64_t autocap_now_ms(void) { return (uint64_t)SDL_GetTicks64(); }
+ 
+@@ -1187,7 +1203,9 @@ static int autocap_provider_request_try(const CodeProvider *cp, uint64_t frame)
+         return 0;
+     }
+     if (cp->request && cp->request()) {
+-        s_autocap_backoff = 1;
++        /* Cadence is restored by a run that removed its pressure (outcome
++         * check in the sampling tick), not merely by starting one. */
++        s_autocap_outcome_state = 1;
+         s_autocap_sig_at_req = s_autocap_provider_sig_pending;
+         s_autocap_reg_at_req = reg;
+         s_autocap_triggers++;
+@@ -1456,6 +1474,44 @@ void overlay_autocapture_tick(void)
+     s_autocap_last_insns = insns;
+     s_autocap_last_insns_delta = insns_delta;
+ 
++    if (s_autocap_outcome_state == 1 && !(cp->busy && cp->busy())) {
++        /* Compile finished during this window: judge the next full one. */
++        s_autocap_outcome_state = 2;
++    } else if (s_autocap_outcome_state == 2) {
++        s_autocap_outcome_state = 0;
++        const int insns_kept = s_autocap_fire_insns >= AUTOCAP_MIN_INSNS &&
++                               insns_delta * 2u >= s_autocap_fire_insns;
++        const int disp_kept  = s_autocap_fire_disp >= AUTOCAP_MIN_DISPATCHES &&
++                               delta * 2u >= s_autocap_fire_disp;
++        if (insns_kept || disp_kept) {
++            s_autocap_outcome_futile++;
++            s_autocap_futile++;
++            s_autocap_futile_insns = insns_delta;
++            s_autocap_futile_disp  = delta;
++            if (s_autocap_backoff < AUTOCAP_BACKOFF_MAX)
++                s_autocap_backoff <<= 1;
++            s_autocap_next_ok = s_frame_count +
++                (uint64_t)AUTOCAP_COOLDOWN_FRAMES * s_autocap_backoff;
++            s_autocap_next_ok_ms = now_ms +
++                AUTOCAP_COOLDOWN_MS * (uint64_t)s_autocap_backoff;
++        } else {
++            s_autocap_backoff = 1;
++            s_autocap_futile_insns = s_autocap_futile_disp = 0;
++        }
++    }
++    if (s_autocap_backoff > 1 &&
++        ((s_autocap_futile_insns && insns_delta >= AUTOCAP_MIN_INSNS &&
++          insns_delta > 2u * s_autocap_futile_insns) ||
++         (s_autocap_futile_disp && delta >= AUTOCAP_MIN_DISPATCHES &&
++          delta > 2u * s_autocap_futile_disp))) {
++        /* Clearly more interpreted work than the level judged futile: new
++         * code (another area), so normal cadence again. */
++        s_autocap_backoff = 1;
++        s_autocap_futile_insns = s_autocap_futile_disp = 0;
++        s_autocap_next_ok = s_frame_count;
++        s_autocap_next_ok_ms = now_ms;
++    }
++
+     if (delta < AUTOCAP_MIN_DISPATCHES && insns_delta < AUTOCAP_MIN_INSNS)
+         return;
+     if (cdrom_load_in_progress()) return;          /* coherent moment only  */
+@@ -1467,8 +1523,12 @@ void overlay_autocapture_tick(void)
+      * a worker writes/hashes it, then a later vblank applies futility/backoff.
+      * Unchanged content with no new candidates backs off without a provider run. */
+     s_autocap_last_fire = s_frame_count;
+-    s_autocap_next_ok = s_frame_count + AUTOCAP_COOLDOWN_FRAMES;
+-    s_autocap_next_ok_ms = now_ms + AUTOCAP_COOLDOWN_MS;
++    s_autocap_fire_insns = insns_delta;
++    s_autocap_fire_disp = delta;
++    s_autocap_next_ok = s_frame_count +
++        (uint64_t)AUTOCAP_COOLDOWN_FRAMES * s_autocap_backoff;
++    s_autocap_next_ok_ms = now_ms +
++        AUTOCAP_COOLDOWN_MS * (uint64_t)s_autocap_backoff;
+     if (autocap_write_start()) {
+         /* The queued job now owns this coherent evidence epoch. Start the next
+          * one immediately so later periodic manifests contain only newly seen
+-- 
+2.43.0
+

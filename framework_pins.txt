@@ -11,6 +11,8 @@
 #              patches/psxrecomp/0005-widescreen-auto-UI-squash-slanted-front-overlays-as-.patch
 #              patches/psxrecomp/0006-render-passes-lock-60-120-FPS-to-NTSC-VBlanks.patch
 #              patches/psxrecomp/0007-widescreen-auto-UI-ignore-stray-front-world-primitiv.patch
+#              patches/psxrecomp/0008-overlay-autocapture-back-off-when-a-compile-does-not.patch
+#              patches/psxrecomp/0009-overlay-cache-load-shards-when-the-install-path-is-l.patch
 #   recomp-ui: patches/recomp-ui/0001-PSX-launcher-show-Render-thread-Present-thread-on-th.patch
 #              patches/recomp-ui/0002-PSX-launcher-show-Antialiasing-as-Off-Bilinear.patch
 psxrecomp=53a057f5 (53a057f548cd1f93f1b4d8300caaeded72f4160d)
