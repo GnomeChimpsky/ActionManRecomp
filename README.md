@@ -11,6 +11,11 @@ PC program, built on
 [recomp-ui](https://github.com/RetroPortingToolKit/recomp-ui), following the
 method of [ApeEscapeRecomp](https://github.com/mstan/ApeEscapeRecomp).
 
+**NOTE: As of 0.6. the recompilation is now built from the US disc, Action Man: Operation Extreme (SLUS-00887),
+running at its native 60 Hz. The PAL code was sped up for 50 Hz, so the US
+code gives the right speed and timing at 60 Hz. The PAL disc is no longer
+supported; PAL owners can stay on 0.5.0.**
+
 The game's MIPS executable is translated ahead of time into C, compiled
 into a native program and run on PSXRecomp's PS1 hardware simulation (GPU, SPU,
 GTE, CD-ROM, MDEC, memory cards) with the recompiled open-source OpenBIOS.
