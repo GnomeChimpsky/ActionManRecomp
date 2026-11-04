@@ -11,7 +11,7 @@ PC program, built on
 [recomp-ui](https://github.com/RetroPortingToolKit/recomp-ui), following the
 method of [ApeEscapeRecomp](https://github.com/mstan/ApeEscapeRecomp).
 
-**NOTE: As of 0.6. the recompilation is now built from the US disc, Action Man: Operation Extreme (SLUS-00887),
+**NOTE: As of 0.6.0 the recompilation is now built from the US disc, Action Man: Operation Extreme (SLUS-00887),
 running at its native 60 Hz. The PAL code was sped up for 50 Hz, so the US
 code gives the right speed and timing at 60 Hz. The PAL disc is no longer
 supported; PAL owners can stay on 0.5.0.**
