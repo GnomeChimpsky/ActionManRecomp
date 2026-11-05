@@ -36,7 +36,7 @@ Releases are published on the
 
 | File | What it is |
 |---|---|
-| `Action-Man-Recomp-<version>-windows-x64.zip` | the game for Windows 10/11 x64 (required) |
+| `Action-Man-Recomp-<version>-windows-x64.zip` | the game for Windows 10/11 x64 |
 | `Action-Man-Recomp-<version>-linux-x64.zip` | the game for Linux x86-64 (glibc 2.35+, OpenGL) |
 
 1. Extract the zip for your platform into a folder of its own.
@@ -73,7 +73,7 @@ The launcher opens before the game. Its **Settings** pages cover:
 The **Mods** page lists the bundled mods. All except Language Select are off
 until you enable them:
 
-- **Action Man Language Select** (on by default) – the European flag screen
+- **Language Select** (on by default) – the European flag screen
   at start-up: English, French, German, Spanish, Italian, Dutch, Swedish,
   Finnish, Norwegian and Danish, with their voice-over. English uses the US
   text. Turn it off to boot straight into US English.
@@ -134,50 +134,6 @@ Defaults (change them under **Settings › Hotkeys**):
 
 ### Recent changes
 
-- **0.4.1 – voice-over.** The briefing voice clips in the apartment were cut
-  off immediately. The emulated CD drive reported *Read* straight after a
-  seeking read command, so the game's XA voice manager never armed its
-  end-of-clip timer and paused every clip. The drive now reports *Seek* until
-  the seek completes, as the hardware does.
-  (`patches/psxrecomp/0001-…`)
-- **0.4.2 – mission-select flicker.** With the Frame Rate mod, the HQ
-  mission-select picture and the in-game item menu flickered while the camera
-  moved. Image uploads the game makes into the frame being drawn are now held
-  and applied after that frame's drawing, as on the console.
-  (`src/mods/amx_frame_rate_plugin.cpp`)
-- **0.4.3 – options-menu flicker in widescreen.** The see-through panels
-  behind the apartment option menus flickered between HUD and world scaling.
-  (`patches/psxrecomp/0002-…`)
-- **0.4.4 – widescreen HUD.** HUD and world are now told apart by where each
-  shape's corners come from: anything with a vertex projected by the 3D math
-  unit (GTE) is world, every other 2D shape is HUD. This fixes the black
-  flickering squares around the language-screen flag and HUD boxes coming
-  apart from their outlines and contents; the 3D vehicle icons inside HUD boxes
-  now move with their box. (`patches/psxrecomp/0003-…`,
-  `[widescreen] auto_ui_provenance` in `game.toml`)
-- **0.4.5 – smoother Frame Rate mod.** On City streets the render passes
-  switched themselves off after a few seconds of driving (a sound call the
-  game makes there faulted inside every pass); it is now skipped during
-  passes. The rate choices are now 50 FPS (the new default) and 100 FPS,
-  which divide the game's 25 fps evenly; see [Frame rate](#frame-rate).
-  The real game frame is now shown between the in-betweens (at 50 FPS only
-  the in-between was shown, twice), and presents are locked to the
-  emulated VBlanks so they no longer slide against the game when it runs
-  slightly behind real time. The release zip now bundles Python and TinyCC
-  for the level-code toolchain, so nothing has to be downloaded.
-- **0.4.6 – launcher clean-up and cheats.** The generic *Smooth motion* option is no
-  longer offered (the Frame Rate mod replaces it), and the *FMV Skipping* and
-  *Bezel Artwork* mods are removed. The Widescreen and Frame Rate mods are now
-  version 1.1.0. New *Action Man Cheats* mod: Invincibility, All weapons,
-  Easy Mode and Unlock all missions, toggled in the launcher's Cheats group.
-  (`src/mods/amx_frame_rate_plugin.cpp`, `src/mods/amx_cheats_plugin.c`,
-  `patches/psxrecomp/0004-…`)
-- **0.5.0 – bow scope in widescreen.** The scope view's mask, side panels and
-  first-person bow are flat 2D drawn over the world; only their axis-aligned
-  pieces were proportion-corrected, so the mask tore open, the zoom meter
-  left its panel and the bow's wings came apart. Slanted 2D drawn in front of
-  the whole world is now corrected with them, and pieces on the screen edge
-  still reach the edges of the wide image. (`patches/psxrecomp/0005-…`)
 - **0.6.0 – US disc.** The game is now built from the US release,
   *Operation Extreme* (`SLUS-00887`), and runs at its native 60 Hz; the PAL
   code was sped up 1.2× per frame for 50 Hz, so the US code gives the right
@@ -192,8 +148,51 @@ Defaults (change them under **Settings › Hotkeys**):
   260 characters) no longer stops the level-code cache from loading, which
   caused a freeze every 6 seconds. (`patches/psxrecomp/0006-…` to `0010-…`,
   `patches/recomp-ui/0002-…`)
-
-Savestates are tied to the exact build and do not load across versions.
+- **0.5.0 – bow scope in widescreen.** The scope view's mask, side panels and
+  first-person bow are flat 2D drawn over the world; only their axis-aligned
+  pieces were proportion-corrected, so the mask tore open, the zoom meter
+  left its panel and the bow's wings came apart. Slanted 2D drawn in front of
+  the whole world is now corrected with them, and pieces on the screen edge
+  still reach the edges of the wide image. (`patches/psxrecomp/0005-…`)
+- **0.4.6 – launcher clean-up and cheats.** The generic *Smooth motion* option is no
+  longer offered (the Frame Rate mod replaces it), and the *FMV Skipping* and
+  *Bezel Artwork* mods are removed. The Widescreen and Frame Rate mods are now
+  version 1.1.0. New *Action Man Cheats* mod: Invincibility, All weapons,
+  Easy Mode and Unlock all missions, toggled in the launcher's Cheats group.
+  (`src/mods/amx_frame_rate_plugin.cpp`, `src/mods/amx_cheats_plugin.c`,
+  `patches/psxrecomp/0004-…`)
+- **0.4.5 – smoother Frame Rate mod.** On City streets the render passes
+  switched themselves off after a few seconds of driving (a sound call the
+  game makes there faulted inside every pass); it is now skipped during
+  passes. The rate choices are now 50 FPS (the new default) and 100 FPS,
+  which divide the PAL game's 25 fps evenly (replaced by 60 / 120 FPS in
+  0.6.0).
+  The real game frame is now shown between the in-betweens (at 50 FPS only
+  the in-between was shown, twice), and presents are locked to the
+  emulated VBlanks so they no longer slide against the game when it runs
+  slightly behind real time. The release zip now bundles Python and TinyCC
+  for the level-code toolchain, so nothing has to be downloaded.
+- **0.4.4 – widescreen HUD.** HUD and world are now told apart by where each
+  shape's corners come from: anything with a vertex projected by the 3D math
+  unit (GTE) is world, every other 2D shape is HUD. This fixes the black
+  flickering squares around the language-screen flag and HUD boxes coming
+  apart from their outlines and contents; the 3D vehicle icons inside HUD boxes
+  now move with their box. (`patches/psxrecomp/0003-…`,
+  `[widescreen] auto_ui_provenance` in `game.toml`)
+- **0.4.3 – options-menu flicker in widescreen.** The see-through panels
+  behind the apartment option menus flickered between HUD and world scaling.
+  (`patches/psxrecomp/0002-…`)
+- **0.4.2 – mission-select flicker.** With the Frame Rate mod, the HQ
+  mission-select picture and the in-game item menu flickered while the camera
+  moved. Image uploads the game makes into the frame being drawn are now held
+  and applied after that frame's drawing, as on the console.
+  (`src/mods/amx_frame_rate_plugin.cpp`)
+- **0.4.1 – voice-over.** The briefing voice clips in the apartment were cut
+  off immediately. The emulated CD drive reported *Read* straight after a
+  seeking read command, so the game's XA voice manager never armed its
+  end-of-clip timer and paused every clip. The drive now reports *Seek* until
+  the seek completes, as the hardware does.
+  (`patches/psxrecomp/0001-…`)
 
 ## Building
 
@@ -278,8 +277,8 @@ This writes `dist/Action-Man-Recomp-<version>-<platform>.zip` with the executabl
   own (see [Level code](#level-code)).
 
 On a machine that cannot download Python and TinyCC, set
-`AMX_OFFLINE_TOOLCHAIN=1` to package `overlay_toolchain/` without them (the
-layout of the 0.3/0.4 test packages). Windows players then run the included
+`AMX_OFFLINE_TOOLCHAIN=1` to package `overlay_toolchain/` without them.
+Windows players then run the included
 `get_overlay_toolchain.ps1` once; Linux players use a system `gcc`/`cc`/`clang`
 if present.
 
@@ -317,8 +316,10 @@ any patch that no longer applies, then refresh `framework_pins.txt` with
    Keep the raw `.bin`; do not convert it to `.iso`.
 3. OpenBIOS is included; a retail BIOS is optional.
 4. Optional features on the **Mods** page: *Action Man Widescreen*
-   (16:9 / 21:9 / adaptive), *Action Man Frame Rate*, *Language Select*, *PGXP*, *CD Speed*. **Settings › Display**: internal
-   resolution, antialiasing, texture filtering, render thread.
+   (16:9 / 21:9 / adaptive), *Action Man Frame Rate*, *Action Man Cheats*,
+   *PGXP*, *CD Speed* (*Language Select* is on by default). **Settings ›
+   Video**: internal resolution, antialiasing, texture filtering, render
+   thread.
 
 ### The level-code toolchain
 
