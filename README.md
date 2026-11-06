@@ -77,7 +77,7 @@ until you enable them:
   at start-up: English, French, German, Spanish, Italian, Dutch, Swedish,
   Finnish, Norwegian and Danish, with their voice-over. English uses the US
   text. Turn it off to boot straight into US English.
-- **Action Man Widescreen** – 16:9, 21:9 or *Adaptive* (follows the window
+- **Action Man Widescreen** – 16:9 (tested), 21:9 (untested) or *Adaptive* (follows the window
   shape), with the HUD kept at its original proportions.
 - **Action Man Frame Rate** – draws extra in-between frames at 60 FPS
   (default, recommended) or 120 FPS, while game logic, timers and audio
@@ -108,6 +108,7 @@ Defaults (change them under **Settings › Hotkeys**):
 - Minor HUD glitches due to widescreen rendering
 - Frame Rate mod: 30 fps scenes at 60 FPS show a mild uneven cadence, and
   120 FPS pacing is uneven; 60 FPS is recommended
+- 21:9 rendering is untested on real hardware. Please report any issues. 
 - A fresh install judders on the first visit to each area until that level's
   code has been compiled (see [Level code](#level-code))
 - Savestates are tied to the build and may not load across versions; PAL
