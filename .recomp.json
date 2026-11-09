@@ -1,6 +1,6 @@
 {
   "$schema": "https://recomp.fyi/schema/v1.json",
-  "game": "ActionMan",
+  "game": "Action Man: Operation Extreme",
   "system": "PS1",
   "type": "recomp",
   "toolchain": "psxrecomp",
